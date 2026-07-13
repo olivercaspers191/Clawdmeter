@@ -30,7 +30,7 @@ void net_init(void) {
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
-    WiFi.setSleep(false);                // steadier latency for a mains-powered display
+    WiFi.setSleep(true);                 // WIFI_PS_MIN_MODEM: 60s poll cadence doesn't need a hot radio; big battery win
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     last_wifi_attempt_ms = millis();
     Serial.printf("net: connecting to SSID '%s'\n", WIFI_SSID);
