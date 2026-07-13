@@ -17,6 +17,8 @@ LV_FONT_DECLARE(font_styrene_16);
 LV_FONT_DECLARE(font_styrene_14);
 LV_FONT_DECLARE(font_mono_32);
 LV_FONT_DECLARE(font_mono_18);
+LV_FONT_DECLARE(font_mono_24);
+LV_FONT_DECLARE(font_styrene_40);
 
 // Layout values computed from the active board's geometry. Populated once
 // in ui_init() and treated as const for the rest of the program. Adding a
@@ -494,29 +496,29 @@ static void apply_usage_layout(bool fable) {
     if (fable) {
         lv_obj_add_flag(lbl_title, LV_OBJ_FLAG_HIDDEN);
 
-        // Compact 3-panel geometry: smaller % + reset fonts, thinner bars.
-        set_font3(lbl_session_pct,   lbl_weekly_pct,   lbl_fable_pct,   &font_styrene_28);
-        set_font3(lbl_session_reset, lbl_weekly_reset, lbl_fable_reset, &font_styrene_20);
+        // Compact 3-panel geometry: mid-size % (40) + reset (24) fonts, thinner bars.
+        set_font3(lbl_session_pct,   lbl_weekly_pct,   lbl_fable_pct,   &font_styrene_40);
+        set_font3(lbl_session_reset, lbl_weekly_reset, lbl_fable_reset, &font_styrene_24);
 
-        int cy  = large ? 14  : 12;
+        int cy  = large ? 10  : 8;
         int ph  = large ? 126 : 120;
         int gap = large ? 10  : 8;
-        int pad = large ? 9   : 8;
-        int by  = large ? 44  : 42;
+        int pad = large ? 8   : 7;
+        int by  = large ? 50  : 46;
         int bh  = large ? 18  : 16;
-        int ry  = large ? 72  : 70;
+        int ry  = large ? 78  : 74;
         place_panel(panel_session, bar_session, lbl_session_reset, cy,                 ph, pad, by, bh, ry);
         place_panel(panel_weekly,  bar_weekly,  lbl_weekly_reset,  cy + (ph + gap),     ph, pad, by, bh, ry);
         place_panel(panel_fable,   bar_fable,   lbl_fable_reset,   cy + 2 * (ph + gap), ph, pad, by, bh, ry);
         lv_obj_clear_flag(panel_fable, LV_OBJ_FLAG_HIDDEN);
 
-        // Bottom row (moved up, no overflow): logo (left) · status (center) · battery (right).
-        int row = large ? 430 : 408;
+        // Bottom row (with margin from the edge): logo (left) · status (center) · battery (right).
+        int row = large ? 414 : 392;
         lv_image_set_scale(logo_img, 150);          // ~59% so the 80px logo fits the row
-        lv_obj_set_pos(logo_img, L.margin - 12, row - 16);
+        lv_obj_set_pos(logo_img, L.margin - 10, row - 12);
         lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, row);
-        lv_obj_set_style_text_font(lbl_anim, &font_mono_32, 0);   // back to the larger status font
-        lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, large ? -16 : -12);
+        lv_obj_set_style_text_font(lbl_anim, &font_mono_24, 0);   // a bit smaller than 32
+        lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, large ? -18 : -14);
     } else {
         lv_obj_add_flag(panel_fable, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(lbl_title, LV_OBJ_FLAG_HIDDEN);
@@ -598,9 +600,9 @@ void ui_update(const UsageData* data) {
         lv_obj_add_flag(lbl_spending_status,   LV_OBJ_FLAG_HIDDEN);
         if (panel_weekly) lv_obj_clear_flag(panel_weekly, LV_OBJ_FLAG_HIDDEN);
     } else {
-        // Font owned by apply_usage_layout (28 in 3-panel mode, 48 in 2-panel).
+        // Font owned by apply_usage_layout (40 in 3-panel mode, 48 in 2-panel).
         lv_obj_set_style_text_font(lbl_session_pct,
-                                   cur_fable_layout ? &font_styrene_28 : &font_styrene_48, 0);
+                                   cur_fable_layout ? &font_styrene_40 : &font_styrene_48, 0);
         lv_label_set_text(lbl_session_label, "Current");
         lv_obj_clear_flag(lbl_session_reset, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(lbl_session_pct_sym, LV_OBJ_FLAG_HIDDEN);
