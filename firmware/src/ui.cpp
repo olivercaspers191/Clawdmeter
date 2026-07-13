@@ -18,6 +18,7 @@ LV_FONT_DECLARE(font_styrene_14);
 LV_FONT_DECLARE(font_mono_32);
 LV_FONT_DECLARE(font_mono_18);
 LV_FONT_DECLARE(font_mono_24);
+LV_FONT_DECLARE(font_mono_26);
 LV_FONT_DECLARE(font_styrene_40);
 
 // Layout values computed from the active board's geometry. Populated once
@@ -500,7 +501,17 @@ static void apply_usage_layout(bool fable) {
         set_font3(lbl_session_pct,   lbl_weekly_pct,   lbl_fable_pct,   &font_styrene_40);
         set_font3(lbl_session_reset, lbl_weekly_reset, lbl_fable_reset, &font_styrene_24);
 
-        int cy  = large ? 10  : 8;
+        // Header row at the very TOP: logo (left) · status (center) · battery (right).
+        // The 48px battery sets the row height, so the 26px status fits within it.
+        int top = large ? 12 : 10;
+        lv_image_set_pivot(logo_img, 0, 0);         // scale toward top-left for predictable placement
+        lv_image_set_scale(logo_img, 150);          // ~59% so the 80px logo fits the row
+        lv_obj_set_pos(logo_img, L.margin, top);
+        lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, top);
+        lv_obj_set_style_text_font(lbl_anim, &font_mono_26, 0);
+        lv_obj_align(lbl_anim, LV_ALIGN_TOP_MID, 0, top + (large ? 10 : 8));
+
+        int cy  = large ? 68  : 60;
         int ph  = large ? 126 : 120;
         int gap = large ? 10  : 8;
         int pad = large ? 8   : 7;
@@ -511,14 +522,6 @@ static void apply_usage_layout(bool fable) {
         place_panel(panel_weekly,  bar_weekly,  lbl_weekly_reset,  cy + (ph + gap),     ph, pad, by, bh, ry);
         place_panel(panel_fable,   bar_fable,   lbl_fable_reset,   cy + 2 * (ph + gap), ph, pad, by, bh, ry);
         lv_obj_clear_flag(panel_fable, LV_OBJ_FLAG_HIDDEN);
-
-        // Bottom row (with margin from the edge): logo (left) · status (center) · battery (right).
-        int row = large ? 414 : 392;
-        lv_image_set_scale(logo_img, 150);          // ~59% so the 80px logo fits the row
-        lv_obj_set_pos(logo_img, L.margin - 10, row - 12);
-        lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, row);
-        lv_obj_set_style_text_font(lbl_anim, &font_mono_24, 0);   // a bit smaller than 32
-        lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, large ? -18 : -14);
     } else {
         lv_obj_add_flag(panel_fable, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(lbl_title, LV_OBJ_FLAG_HIDDEN);
@@ -662,7 +665,7 @@ void ui_update(const UsageData* data) {
     bool want_fable = data->has_fable && !data->enterprise;
     if (want_fable) {
         int f_pct = (int)(data->fable_pct + 0.5f);
-        lv_label_set_text(lbl_fable_label, data->fable_name);
+        lv_label_set_text_fmt(lbl_fable_label, "%s 1W", data->fable_name);
         lv_label_set_text_fmt(lbl_fable_pct, "%d%%", f_pct);
         lv_bar_set_value(bar_fable, f_pct, LV_ANIM_ON);
         lv_obj_set_style_bg_color(bar_fable, pct_color(data->fable_pct), LV_PART_INDICATOR);
