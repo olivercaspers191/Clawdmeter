@@ -468,51 +468,67 @@ static void init_usage_screen(lv_obj_t* scr) {
 // y-offsets are relative to the panel's content area, so shrinking a panel just
 // re-seats the bar and reset line.
 static void place_panel(lv_obj_t* panel, lv_obj_t* bar, lv_obj_t* reset,
-                        int y, int h, int pad, int bar_y, int reset_y) {
+                        int y, int h, int pad, int bar_y, int bar_h, int reset_y) {
     lv_obj_set_y(panel, y);
     lv_obj_set_height(panel, h);
     lv_obj_set_style_pad_top(panel, pad, 0);
     lv_obj_set_style_pad_bottom(panel, pad, 0);
     lv_obj_set_y(bar, bar_y);
+    lv_obj_set_height(bar, bar_h);
     lv_obj_set_y(reset, reset_y);
+}
+
+static void set_font3(lv_obj_t* a, lv_obj_t* b, lv_obj_t* c, const lv_font_t* f) {
+    lv_obj_set_style_text_font(a, f, 0);
+    lv_obj_set_style_text_font(b, f, 0);
+    lv_obj_set_style_text_font(c, f, 0);
 }
 
 // Reflow the usage view between the default 2-panel layout and a 3-panel layout
 // when a per-model weekly bar (Fable) is present. In 3-panel mode the "Usage"
 // title is dropped and the logo + status line + battery share one bottom row,
 // freeing the vertical space for the third bar. Fable absent -> exact original.
+// apply_usage_layout owns the % / reset fonts so ui_update doesn't fight it.
 static void apply_usage_layout(bool fable) {
     bool large = (L.scr_h >= 460);
     if (fable) {
         lv_obj_add_flag(lbl_title, LV_OBJ_FLAG_HIDDEN);
 
-        int cy  = large ? 18  : 14;
-        int ph  = large ? 131 : 126;
+        // Compact 3-panel geometry: smaller % + reset fonts, thinner bars.
+        set_font3(lbl_session_pct,   lbl_weekly_pct,   lbl_fable_pct,   &font_styrene_28);
+        set_font3(lbl_session_reset, lbl_weekly_reset, lbl_fable_reset, &font_styrene_20);
+
+        int cy  = large ? 14  : 12;
+        int ph  = large ? 126 : 120;
         int gap = large ? 10  : 8;
-        int pad = large ? 10  : 8;
-        int by  = large ? 50  : 46;
-        int ry  = large ? 82  : 76;
-        place_panel(panel_session, bar_session, lbl_session_reset, cy,                 ph, pad, by, ry);
-        place_panel(panel_weekly,  bar_weekly,  lbl_weekly_reset,  cy + (ph + gap),     ph, pad, by, ry);
-        place_panel(panel_fable,   bar_fable,   lbl_fable_reset,   cy + 2 * (ph + gap), ph, pad, by, ry);
+        int pad = large ? 9   : 8;
+        int by  = large ? 44  : 42;
+        int bh  = large ? 18  : 16;
+        int ry  = large ? 72  : 70;
+        place_panel(panel_session, bar_session, lbl_session_reset, cy,                 ph, pad, by, bh, ry);
+        place_panel(panel_weekly,  bar_weekly,  lbl_weekly_reset,  cy + (ph + gap),     ph, pad, by, bh, ry);
+        place_panel(panel_fable,   bar_fable,   lbl_fable_reset,   cy + 2 * (ph + gap), ph, pad, by, bh, ry);
         lv_obj_clear_flag(panel_fable, LV_OBJ_FLAG_HIDDEN);
 
-        // Bottom row: logo (left, scaled down) · status (center) · battery (right).
-        int row = large ? 436 : 416;
-        lv_image_set_scale(logo_img, 128);          // ~50% so the 80px logo fits the row
-        lv_obj_set_pos(logo_img, L.margin - 16, row - 22);
-        lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, row + 4);
-        lv_obj_set_style_text_font(lbl_anim, &font_mono_18, 0);
-        lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, -14);
+        // Bottom row (moved up, no overflow): logo (left) · status (center) · battery (right).
+        int row = large ? 430 : 408;
+        lv_image_set_scale(logo_img, 150);          // ~59% so the 80px logo fits the row
+        lv_obj_set_pos(logo_img, L.margin - 12, row - 16);
+        lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, row);
+        lv_obj_set_style_text_font(lbl_anim, &font_mono_32, 0);   // back to the larger status font
+        lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, large ? -16 : -12);
     } else {
         lv_obj_add_flag(panel_fable, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(lbl_title, LV_OBJ_FLAG_HIDDEN);
 
+        set_font3(lbl_session_pct,   lbl_weekly_pct,   lbl_fable_pct,   &font_styrene_48);
+        set_font3(lbl_session_reset, lbl_weekly_reset, lbl_fable_reset, &font_styrene_28);
+
         place_panel(panel_session, bar_session, lbl_session_reset,
-                    L.content_y, L.usage_panel_h, 12, L.usage_bar_y, L.usage_reset_y);
+                    L.content_y, L.usage_panel_h, 12, L.usage_bar_y, 24, L.usage_reset_y);
         place_panel(panel_weekly, bar_weekly, lbl_weekly_reset,
                     L.content_y + L.usage_panel_h + L.usage_panel_gap, L.usage_panel_h, 12,
-                    L.usage_bar_y, L.usage_reset_y);
+                    L.usage_bar_y, 24, L.usage_reset_y);
 
         lv_image_set_scale(logo_img, 256);          // 100%
         lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
@@ -531,6 +547,8 @@ void ui_init(void) {
     lv_obj_t* scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, COL_BG, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
 
     init_icon_dsc_rgb565a8(&logo_dsc, LOGO_WIDTH, LOGO_HEIGHT, logo_data);
     init_battery_icons();
@@ -580,7 +598,9 @@ void ui_update(const UsageData* data) {
         lv_obj_add_flag(lbl_spending_status,   LV_OBJ_FLAG_HIDDEN);
         if (panel_weekly) lv_obj_clear_flag(panel_weekly, LV_OBJ_FLAG_HIDDEN);
     } else {
-        lv_obj_set_style_text_font(lbl_session_pct, &font_styrene_48, 0);
+        // Font owned by apply_usage_layout (28 in 3-panel mode, 48 in 2-panel).
+        lv_obj_set_style_text_font(lbl_session_pct,
+                                   cur_fable_layout ? &font_styrene_28 : &font_styrene_48, 0);
         lv_label_set_text(lbl_session_label, "Current");
         lv_obj_clear_flag(lbl_session_reset, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(lbl_session_pct_sym, LV_OBJ_FLAG_HIDDEN);
