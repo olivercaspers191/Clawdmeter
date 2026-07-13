@@ -65,13 +65,15 @@ def main():
     out_path = sys.argv[2] if len(sys.argv) > 2 else "screenshot.png"
 
     # Baud is ignored by the ESP32-S3 native USB CDC, but pyserial needs a value.
-    port = serial.Serial(port_path, 115200, timeout=15)
+    # Short per-read timeout + many retries tolerates brief gaps in the USB stream
+    # (interleaved logs, momentary stalls) without abandoning a partial frame.
+    port = serial.Serial(port_path, 115200, timeout=3)
     port.reset_input_buffer()
     port.write(b"screenshot\n")
     port.flush()
 
     w = h = raw_size = 0
-    while True:
+    for _ in range(10):
         line = port.readline().decode("utf-8", errors="replace").strip()
         if line.startswith("SCREENSHOT_START"):
             _, sw, sh, sz = line.split()
@@ -79,15 +81,20 @@ def main():
             break
         if line == "SCREENSHOT_ERR":
             sys.exit("Device reported a screenshot error (LV_USE_SNAPSHOT off?).")
-        if not line:
-            sys.exit("Timed out waiting for the device. Is it on COM and not held by the monitor?")
+    if not raw_size:
+        sys.exit("No SCREENSHOT_START. Is the board on COM and not held by a monitor?")
 
     data = b""
+    idle = 0
     while len(data) < raw_size:
         chunk_ = port.read(min(4096, raw_size - len(data)))
-        if not chunk_:
-            sys.exit(f"Timeout: got {len(data)} of {raw_size} bytes.")
-        data += chunk_
+        if chunk_:
+            data += chunk_
+            idle = 0
+        else:
+            idle += 1
+            if idle >= 10:   # ~30s of total silence -> really stalled
+                sys.exit(f"Timeout: got {len(data)} of {raw_size} bytes. Retry the capture.")
     port.close()
 
     write_png(out_path, w, h, rgb565le_to_rgb888(data, w, h))
