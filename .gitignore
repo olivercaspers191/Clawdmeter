@@ -2,6 +2,10 @@
 firmware/.pio/
 firmware/.vscode/
 
+# WiFi credentials — real values live only on the flashing machine, never in git
+firmware/src/wifi_config.h
+homeserver/node_modules/
+
 # OS
 .DS_Store
 

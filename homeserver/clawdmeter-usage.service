@@ -1,0 +1,17 @@
+[Unit]
+Description=Clawdmeter WiFi usage service (serves Claude usage JSON at :8090/usage)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Runs as the user whose ~/.claude/.credentials.json holds the OAuth token.
+Type=simple
+ExecStart=/usr/bin/node %h/claude/Clawdmeter/homeserver/usage-service.mjs
+Restart=always
+RestartSec=10
+# Optional overrides:
+# Environment=CLAWD_PORT=8090
+# Environment=CLAWD_POLL_INTERVAL=60
+
+[Install]
+WantedBy=default.target

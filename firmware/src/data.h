@@ -14,6 +14,13 @@ struct UsageData {
     char reset_date[12];     // formatted reset date e.g. "Jul 1" (Enterprise)
     long clock_epoch;        // local wall-clock epoch (s) from daemon; 0 = not provided
     int  clock_fmt;          // 12 or 24 (hour format from daemon); defaults to 24
+    // Per-model weekly limit (weekly_scoped, e.g. Fable). Present only while the
+    // model is in the subscription; when it leaves, has_fable is false and the UI
+    // hides the bar.
+    bool  has_fable;         // true = a per-model weekly limit was supplied ("f" key)
+    float fable_pct;         // 0-100 utilization of that model's weekly window
+    int   fable_reset_mins;  // minutes until it resets
+    char  fable_name[16];    // model display name, e.g. "Fable"
     bool ok;                 // data parse succeeded
     bool valid;              // false until first successful parse
 };

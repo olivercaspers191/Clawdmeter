@@ -6,7 +6,7 @@
 
 #include "data.h"
 #include "ui.h"
-#include "ble.h"
+#include "transport.h"
 #include "splash.h"
 #include "usage_rate.h"
 #include "idle.h"
@@ -119,6 +119,11 @@ static bool parse_json(const char* json, UsageData* out) {
     strlcpy(out->reset_date, doc["rd"] | "", sizeof(out->reset_date));
     out->clock_epoch = doc["t"] | 0L;
     out->clock_fmt = doc["tf"] | 24;
+    // Per-model weekly limit (e.g. Fable). Absent "f" key → hide the bar.
+    out->has_fable = !doc["f"].isNull();
+    out->fable_pct = doc["f"] | 0.0f;
+    out->fable_reset_mins = doc["fr"] | -1;
+    strlcpy(out->fable_name, doc["fn"] | "Fable", sizeof(out->fable_name));
     out->ok = doc["ok"] | false;
     out->valid = true;
     return true;
@@ -225,19 +230,19 @@ void setup() {
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(indev, my_touch_cb);
 
-    ble_init();
+    transport_init();
     input_hal_init();
 
     ui_init();
-    ui_update_ble_status(ble_get_state(), ble_get_device_name(), ble_get_mac_address());
+    ui_update_conn_status(transport_get_state(), transport_get_name(), transport_get_info());
     ui_update_battery(power_hal_battery_pct(), power_hal_is_charging());
     ui_show_screen(SCREEN_SPLASH);
 
-    Serial.printf("Dashboard ready (%s, %dx%d), waiting for data on BLE...\n",
+    Serial.printf("Dashboard ready (%s, %dx%d), waiting for usage data...\n",
         board_caps().name, W, H);
 }
 
-static ble_state_t last_ble_state = BLE_STATE_INIT;
+static conn_state_t last_conn_state = CONN_STATE_INIT;
 
 // Hold-to-pair gesture: hold the PWR button ~3s, then RELEASE → clear all BLE
 // bonds and re-advertise. Clearing on *release* (not while held) is deliberate:
@@ -267,7 +272,9 @@ static void pair_tick(void) {
     if (power_hal_pwr_released()) {
         if (pair_state == PAIR_ARMED) {
             Serial.println("Pair: released in window — clearing bonds, advertising");
+#ifndef USE_WIFI_TRANSPORT
             ble_clear_bonds();
+#endif
         } else {
             Serial.println("Pair: released too early — cancelled");
         }
@@ -289,7 +296,7 @@ void loop() {
     idle_tick();
     lv_timer_handler();
     ui_tick_anim();
-    ble_tick();
+    transport_tick();
     power_hal_tick();
     imu_hal_tick();
     sound_hal_tick();
@@ -315,10 +322,14 @@ void loop() {
         if (primary_now != primary_was) {
             if (primary_now) {
                 if (idle_consume_wake_press()) primary_wake_swallowed = true;
+#ifndef USE_WIFI_TRANSPORT
                 else                            ble_keyboard_press(0x2C, 0);  // HID Space, no mods
+#endif
             } else {
                 if (primary_wake_swallowed) primary_wake_swallowed = false;
+#ifndef USE_WIFI_TRANSPORT
                 else                        ble_keyboard_release();
+#endif
             }
             primary_was = primary_now;
         }
@@ -330,10 +341,14 @@ void loop() {
             if (secondary_now != secondary_was) {
                 if (secondary_now) {
                     if (idle_consume_wake_press()) secondary_wake_swallowed = true;
+#ifndef USE_WIFI_TRANSPORT
                     else                            ble_keyboard_press(0x2B, 0x02);  // HID Tab + LEFT_SHIFT
+#endif
                 } else {
                     if (secondary_wake_swallowed) secondary_wake_swallowed = false;
+#ifndef USE_WIFI_TRANSPORT
                     else                          ble_keyboard_release();
+#endif
                 }
                 secondary_was = secondary_now;
             }
@@ -351,10 +366,10 @@ void loop() {
         pair_tick();
     }
 
-    ble_state_t bs = ble_get_state();
-    if (bs != last_ble_state) {
-        last_ble_state = bs;
-        ui_update_ble_status(bs, ble_get_device_name(), ble_get_mac_address());
+    conn_state_t cs = transport_get_state();
+    if (cs != last_conn_state) {
+        last_conn_state = cs;
+        ui_update_conn_status(cs, transport_get_name(), transport_get_info());
     }
 
     static int  last_pct      = -2;
@@ -369,8 +384,8 @@ void loop() {
 
     check_serial_cmd();
 
-    if (ble_has_data()) {
-        if (parse_json(ble_get_data(), &usage)) {
+    if (transport_has_data()) {
+        if (parse_json(transport_get_data(), &usage)) {
             int g_before = usage_rate_group();
             bool session_reset = usage_rate_sample(usage.session_pct);
             int g_after = usage_rate_group();
@@ -387,9 +402,9 @@ void loop() {
                 if (splash_is_active()) splash_pick_for_current_rate();
             }
             ui_update(&usage);
-            ble_send_ack();
+            transport_send_ack();
         } else {
-            ble_send_nack();
+            transport_send_nack();
         }
     }
 
