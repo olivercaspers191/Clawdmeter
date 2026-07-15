@@ -16,4 +16,3 @@ void ui_toggle_splash(void);
 screen_t ui_get_current_screen(void);
 void ui_update_conn_status(conn_state_t state, const char* name, const char* info);
 void ui_update_battery(int percent, bool charging);
-void ui_dbg_mem(const char* tag);   // TEMPORARY DIAGNOSTIC — LVGL pool report

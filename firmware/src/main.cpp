@@ -323,20 +323,7 @@ void loop() {
         power_sleep_enter_deep();
     }
 
-    // TEMPORARY DIAGNOSTIC: the first lv_timer_handler() is the first real render
-    // (and the first glyph-cache fill). If the log stops between these two lines,
-    // the hang is in rendering, not in widget construction.
-    static bool dbg_first_render = true;
-    if (dbg_first_render) { Serial.println("[dbg] first lv_timer_handler ->"); Serial.flush(); }
-
     lv_timer_handler();
-
-    if (dbg_first_render) {
-        dbg_first_render = false;
-        Serial.println("[dbg] first lv_timer_handler <- returned"); Serial.flush();
-        ui_dbg_mem("after first render");
-    }
-
     ui_tick_anim();
     transport_tick();
     power_hal_tick();
