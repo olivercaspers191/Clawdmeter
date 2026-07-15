@@ -6,6 +6,24 @@
 #include "icons.h"
 #include "hal/board_caps.h"
 
+// ==== TEMPORARY DIAGNOSTIC — revert with the commit that added it ====
+// Chasing a silent hang introduced by the battery-percentage label. LVGL runs on
+// its own fixed 64 KB pool (LV_CONF_SKIP -> LV_MEM_SIZE default), and with
+// LV_USE_ASSERT_MALLOC=1 + LV_ASSERT_HANDLER=while(1) + LV_USE_LOG=0 a failed
+// allocation halts the CPU *silently* — black panel, dead buttons, no output.
+// These traces show how far ui_init() gets and what the pool looks like at each
+// step. The last line printed before the log stops is the culprit.
+#include <Arduino.h>
+static void dbg_mem(const char* tag) {
+    lv_mem_monitor_t m;
+    lv_mem_monitor(&m);
+    Serial.printf("[lvmem] %-22s total=%u free=%u biggest=%u used=%u%% frag=%u%%\n",
+                  tag, (unsigned)m.total_size, (unsigned)m.free_size,
+                  (unsigned)m.free_biggest_size, (unsigned)m.used_pct,
+                  (unsigned)m.frag_pct);
+    Serial.flush();
+}
+
 // Custom fonts (scaled for 314 PPI, ~1.9x from original 165 PPI)
 LV_FONT_DECLARE(font_tiempos_56);
 LV_FONT_DECLARE(font_tiempos_34);
@@ -550,10 +568,14 @@ void ui_init(void) {
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
 
+    dbg_mem("ui_init entry");
+
     init_icon_dsc_rgb565a8(&logo_dsc, LOGO_WIDTH, LOGO_HEIGHT, logo_data);
 
     init_usage_screen(scr);
+    dbg_mem("after usage screen");
     splash_init(scr);
+    dbg_mem("after splash_init");
 
     if (splash_get_root()) {
         lv_obj_add_event_cb(splash_get_root(), global_click_cb, LV_EVENT_CLICKED, NULL);
@@ -562,17 +584,25 @@ void ui_init(void) {
     logo_img = lv_image_create(scr);
     lv_image_set_src(logo_img, &logo_dsc);
     lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
+    dbg_mem("after logo");
 
     // Auto-sized and aligned by its RIGHT edge, so the slot stays put as the
     // text grows from "9%" to "+100%".
     battery_lbl = lv_label_create(scr);
+    dbg_mem("after label create");
     lv_obj_set_style_text_font(battery_lbl, &font_styrene_24, 0);
     lv_obj_set_style_text_color(battery_lbl, COL_DIM, 0);
+    dbg_mem("after label style");
     lv_label_set_text(battery_lbl, "--%");
+    dbg_mem("after label text");
     lv_obj_align(battery_lbl, LV_ALIGN_TOP_RIGHT, -L.margin, L.title_y + 12);
+    dbg_mem("after label align");
 
     apply_usage_layout(false);   // 2-panel by default; ui_update flips to 3 when Fable appears
+    dbg_mem("ui_init done");
 }
+
+void ui_dbg_mem(const char* tag) { dbg_mem(tag); }   // TEMPORARY DIAGNOSTIC
 
 void ui_update(const UsageData* data) {
     if (!data->valid) return;
@@ -823,7 +853,9 @@ void ui_update_battery(int percent, bool charging) {
 
     char buf[8];
     snprintf(buf, sizeof(buf), "%s%d%%", charging ? "+" : "", percent);
+    Serial.printf("[batt] set text \"%s\"\n", buf); Serial.flush();   // TEMPORARY DIAGNOSTIC
     lv_label_set_text(battery_lbl, buf);
     lv_obj_set_style_text_color(battery_lbl, col, 0);
     apply_battery_visibility();
+    dbg_mem("after batt update");   // TEMPORARY DIAGNOSTIC
 }
