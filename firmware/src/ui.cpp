@@ -158,11 +158,25 @@ static lv_obj_t* lbl_spending_status = nullptr;   // "Under pace" / "On pace" / 
 static lv_obj_t* lbl_anim;      // status line: connection state + whimsical idle
 
 // ---- Battery indicator (shared, on top) ----
-// Numeric percentage rather than the old 4-state icon: same slot, but the exact
-// level is readable and the colour (green/amber/red) carries the at-a-glance
-// read the icon's fill bars used to. Charging gets a "+" prefix — THEME_AMBER
-// and THEME_ACCENT are the same terra-cotta, so colour alone can't signal it.
-static lv_obj_t* battery_lbl;
+// Phone-style: the level as a number inside a drawn battery outline, so the
+// figure is unambiguously a battery and not another usage percentage. Outline,
+// terminal nub and number all take the level colour (green/amber/red) for the
+// at-a-glance read the old icon's fill bars carried. Charging gets a "+" prefix
+// — THEME_AMBER and THEME_ACCENT are the same terra-cotta, so colour alone
+// can't signal it. Drawn from objects rather than a bitmap: it recolours freely
+// and stays crisp, which a tinted RGB565A8 icon could not.
+//
+// The nub sits outside the shell, and LVGL clips children to their parent, so
+// shell and nub are siblings inside a transparent wrapper that the layout code
+// positions as a single unit.
+#define BATT_W      64   // shell (outline) width
+#define BATT_H      30   // shell height — sets the whole widget's height
+#define BATT_NUB_W  4    // terminal on the right
+#define BATT_NUB_H  12
+static lv_obj_t* battery_wrap;    // transparent holder: shell + nub, aligned as one
+static lv_obj_t* battery_shell;   // the outline
+static lv_obj_t* battery_nub;     // the terminal
+static lv_obj_t* battery_lbl;     // the number, centred inside the shell
 static lv_obj_t* logo_img;
 
 // ---- Live-data freshness → which usage sub-view to show ----
@@ -520,7 +534,7 @@ static void apply_usage_layout(bool fable) {
         lv_image_set_pivot(logo_img, 0, 0);         // scale toward top-left for predictable placement
         lv_image_set_scale(logo_img, 150);          // ~59% so the 80px logo fits the row
         lv_obj_set_pos(logo_img, L.margin, top);
-        lv_obj_align(battery_lbl, LV_ALIGN_TOP_RIGHT, -L.margin, top + 8);  // centred against the ~47px logo
+        lv_obj_align(battery_wrap, LV_ALIGN_TOP_RIGHT, -L.margin, top + 8);  // centred against the ~47px logo
         lv_obj_set_style_text_font(lbl_anim, &font_mono_26, 0);
         lv_obj_align(lbl_anim, LV_ALIGN_TOP_MID, 0, top + (large ? 10 : 8));
 
@@ -550,7 +564,7 @@ static void apply_usage_layout(bool fable) {
 
         lv_image_set_scale(logo_img, 256);          // 100%
         lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
-        lv_obj_align(battery_lbl, LV_ALIGN_TOP_RIGHT, -L.margin, L.title_y + 9);  // centred in the old 48px icon band
+        lv_obj_align(battery_wrap, LV_ALIGN_TOP_RIGHT, -L.margin, L.title_y + 9);  // centred in the old 48px icon band
         lv_obj_set_style_text_font(lbl_anim, &font_mono_32, 0);
         lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, -15);
     }
@@ -586,17 +600,45 @@ void ui_init(void) {
     lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
     dbg_mem("after logo");
 
-    // Auto-sized and aligned by its RIGHT edge, so the slot stays put as the
-    // text grows from "9%" to "+100%".
-    battery_lbl = lv_label_create(scr);
-    dbg_mem("after label create");
-    lv_obj_set_style_text_font(battery_lbl, &font_styrene_24, 0);
+    // Battery: number inside a drawn outline. Fixed size, so the slot never
+    // reflows as the text goes from "9" to "+100".
+    battery_wrap = lv_obj_create(scr);
+    lv_obj_remove_style_all(battery_wrap);          // default lv_obj style is opaque white + border
+    lv_obj_set_size(battery_wrap, BATT_W + BATT_NUB_W, BATT_H);
+    lv_obj_clear_flag(battery_wrap, LV_OBJ_FLAG_SCROLLABLE);
+    dbg_mem("after batt wrap");
+
+    battery_shell = lv_obj_create(battery_wrap);
+    lv_obj_remove_style_all(battery_shell);
+    lv_obj_set_size(battery_shell, BATT_W, BATT_H);
+    lv_obj_set_pos(battery_shell, 0, 0);
+    lv_obj_clear_flag(battery_shell, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(battery_shell, 8, 0);
+    lv_obj_set_style_border_width(battery_shell, 2, 0);
+    lv_obj_set_style_border_color(battery_shell, COL_DIM, 0);
+    lv_obj_set_style_border_opa(battery_shell, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(battery_shell, LV_OPA_TRANSP, 0);
+
+    battery_nub = lv_obj_create(battery_wrap);
+    lv_obj_remove_style_all(battery_nub);
+    lv_obj_set_size(battery_nub, BATT_NUB_W, BATT_NUB_H);
+    lv_obj_set_pos(battery_nub, BATT_W, (BATT_H - BATT_NUB_H) / 2);
+    lv_obj_set_style_radius(battery_nub, 2, 0);
+    lv_obj_set_style_bg_color(battery_nub, COL_DIM, 0);
+    lv_obj_set_style_bg_opa(battery_nub, LV_OPA_COVER, 0);
+    dbg_mem("after batt shell+nub");
+
+    // No "%" inside the outline — the outline already says "battery", the way a
+    // phone's status bar does. Keeps "+100" clear of the 60px inner width too.
+    battery_lbl = lv_label_create(battery_shell);
+    lv_obj_set_style_text_font(battery_lbl, &font_styrene_20, 0);
     lv_obj_set_style_text_color(battery_lbl, COL_DIM, 0);
-    dbg_mem("after label style");
-    lv_label_set_text(battery_lbl, "--%");
-    dbg_mem("after label text");
-    lv_obj_align(battery_lbl, LV_ALIGN_TOP_RIGHT, -L.margin, L.title_y + 12);
-    dbg_mem("after label align");
+    lv_label_set_text(battery_lbl, "--");
+    lv_obj_center(battery_lbl);
+    dbg_mem("after batt label");
+
+    lv_obj_align(battery_wrap, LV_ALIGN_TOP_RIGHT, -L.margin, L.title_y + 9);
+    dbg_mem("after batt align");
 
     apply_usage_layout(false);   // 2-panel by default; ui_update flips to 3 when Fable appears
     dbg_mem("ui_init done");
@@ -786,9 +828,9 @@ void ui_tick_anim(void) {
 
 static screen_t prev_non_splash_screen = SCREEN_USAGE;
 static void apply_battery_visibility(void) {
-    if (!battery_lbl) return;
-    if (current_screen == SCREEN_SPLASH) lv_obj_add_flag(battery_lbl, LV_OBJ_FLAG_HIDDEN);
-    else                                  lv_obj_clear_flag(battery_lbl, LV_OBJ_FLAG_HIDDEN);
+    if (!battery_wrap) return;
+    if (current_screen == SCREEN_SPLASH) lv_obj_add_flag(battery_wrap, LV_OBJ_FLAG_HIDDEN);
+    else                                  lv_obj_clear_flag(battery_wrap, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void global_click_cb(lv_event_t* e) {
@@ -836,12 +878,20 @@ void ui_update_conn_status(conn_state_t state, const char* name, const char* inf
     update_view_state();
 }
 
+// Outline, nub and number always share one colour, so the widget reads as a
+// single object rather than a lit shape with unrelated text in it.
+static void set_battery_color(lv_color_t col) {
+    lv_obj_set_style_border_color(battery_shell, col, 0);
+    lv_obj_set_style_bg_color(battery_nub, col, 0);
+    lv_obj_set_style_text_color(battery_lbl, col, 0);
+}
+
 void ui_update_battery(int percent, bool charging) {
     if (!battery_lbl) return;
 
     if (percent < 0) {          // PMU hasn't reported a level yet
-        lv_label_set_text(battery_lbl, "--%");
-        lv_obj_set_style_text_color(battery_lbl, COL_DIM, 0);
+        lv_label_set_text(battery_lbl, "--");
+        set_battery_color(COL_DIM);
         apply_battery_visibility();
         return;
     }
@@ -852,10 +902,11 @@ void ui_update_battery(int percent, bool charging) {
     else if (percent <= 50) col = COL_AMBER;
 
     char buf[8];
-    snprintf(buf, sizeof(buf), "%s%d%%", charging ? "+" : "", percent);
+    snprintf(buf, sizeof(buf), "%s%d", charging ? "+" : "", percent);
     Serial.printf("[batt] set text \"%s\"\n", buf); Serial.flush();   // TEMPORARY DIAGNOSTIC
     lv_label_set_text(battery_lbl, buf);
-    lv_obj_set_style_text_color(battery_lbl, col, 0);
+    lv_obj_center(battery_lbl);   // re-centre: the label auto-sizes to the new text
+    set_battery_color(col);
     apply_battery_visibility();
     dbg_mem("after batt update");   // TEMPORARY DIAGNOSTIC
 }
