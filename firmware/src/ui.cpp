@@ -140,9 +140,12 @@ static lv_obj_t* lbl_spending_status = nullptr;   // "Under pace" / "On pace" / 
 static lv_obj_t* lbl_anim;      // status line: connection state + whimsical idle
 
 // ---- Battery indicator (shared, on top) ----
-static lv_obj_t* battery_img;
+// Numeric percentage rather than the old 4-state icon: same slot, but the exact
+// level is readable and the colour (green/amber/red) carries the at-a-glance
+// read the icon's fill bars used to. Charging gets a "+" prefix — THEME_AMBER
+// and THEME_ACCENT are the same terra-cotta, so colour alone can't signal it.
+static lv_obj_t* battery_lbl;
 static lv_obj_t* logo_img;
-static lv_image_dsc_t battery_dscs[5];  // empty, low, medium, full, charging
 
 // ---- Live-data freshness → which usage sub-view to show ----
 // usage panels when data is flowing, an idle "Zzz" screen when the host is
@@ -289,14 +292,6 @@ static lv_obj_t* make_pill(lv_obj_t* parent, const char* text) {
     lv_obj_set_style_pad_top(lbl, 6, 0);
     lv_obj_set_style_pad_bottom(lbl, 6, 0);
     return lbl;
-}
-
-static void init_battery_icons(void) {
-    init_icon_dsc_rgb565a8(&battery_dscs[0], ICON_BATTERY_W, ICON_BATTERY_H, icon_battery_data);
-    init_icon_dsc_rgb565a8(&battery_dscs[1], ICON_BATTERY_LOW_W, ICON_BATTERY_LOW_H, icon_battery_low_data);
-    init_icon_dsc_rgb565a8(&battery_dscs[2], ICON_BATTERY_MEDIUM_W, ICON_BATTERY_MEDIUM_H, icon_battery_medium_data);
-    init_icon_dsc_rgb565a8(&battery_dscs[3], ICON_BATTERY_FULL_W, ICON_BATTERY_FULL_H, icon_battery_full_data);
-    init_icon_dsc_rgb565a8(&battery_dscs[4], ICON_BATTERY_CHARGING_W, ICON_BATTERY_CHARGING_H, icon_battery_charging_data);
 }
 
 // ======== Usage Screen ========
@@ -507,7 +502,7 @@ static void apply_usage_layout(bool fable) {
         lv_image_set_pivot(logo_img, 0, 0);         // scale toward top-left for predictable placement
         lv_image_set_scale(logo_img, 150);          // ~59% so the 80px logo fits the row
         lv_obj_set_pos(logo_img, L.margin, top);
-        lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, top);
+        lv_obj_align(battery_lbl, LV_ALIGN_TOP_RIGHT, -L.margin, top + 8);  // centred against the ~47px logo
         lv_obj_set_style_text_font(lbl_anim, &font_mono_26, 0);
         lv_obj_align(lbl_anim, LV_ALIGN_TOP_MID, 0, top + (large ? 10 : 8));
 
@@ -537,7 +532,7 @@ static void apply_usage_layout(bool fable) {
 
         lv_image_set_scale(logo_img, 256);          // 100%
         lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
-        lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, L.title_y);
+        lv_obj_align(battery_lbl, LV_ALIGN_TOP_RIGHT, -L.margin, L.title_y + 9);  // centred in the old 48px icon band
         lv_obj_set_style_text_font(lbl_anim, &font_mono_32, 0);
         lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, -15);
     }
@@ -556,7 +551,6 @@ void ui_init(void) {
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
 
     init_icon_dsc_rgb565a8(&logo_dsc, LOGO_WIDTH, LOGO_HEIGHT, logo_data);
-    init_battery_icons();
 
     init_usage_screen(scr);
     splash_init(scr);
@@ -569,9 +563,13 @@ void ui_init(void) {
     lv_image_set_src(logo_img, &logo_dsc);
     lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
 
-    battery_img = lv_image_create(scr);
-    lv_image_set_src(battery_img, &battery_dscs[0]);
-    lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, L.title_y);
+    // Auto-sized and aligned by its RIGHT edge, so the slot stays put as the
+    // text grows from "9%" to "+100%".
+    battery_lbl = lv_label_create(scr);
+    lv_obj_set_style_text_font(battery_lbl, &font_styrene_24, 0);
+    lv_obj_set_style_text_color(battery_lbl, COL_DIM, 0);
+    lv_label_set_text(battery_lbl, "--%");
+    lv_obj_align(battery_lbl, LV_ALIGN_TOP_RIGHT, -L.margin, L.title_y + 12);
 
     apply_usage_layout(false);   // 2-panel by default; ui_update flips to 3 when Fable appears
 }
@@ -758,9 +756,9 @@ void ui_tick_anim(void) {
 
 static screen_t prev_non_splash_screen = SCREEN_USAGE;
 static void apply_battery_visibility(void) {
-    if (!battery_img) return;
-    if (current_screen == SCREEN_SPLASH) lv_obj_add_flag(battery_img, LV_OBJ_FLAG_HIDDEN);
-    else                                  lv_obj_clear_flag(battery_img, LV_OBJ_FLAG_HIDDEN);
+    if (!battery_lbl) return;
+    if (current_screen == SCREEN_SPLASH) lv_obj_add_flag(battery_lbl, LV_OBJ_FLAG_HIDDEN);
+    else                                  lv_obj_clear_flag(battery_lbl, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void global_click_cb(lv_event_t* e) {
@@ -809,20 +807,23 @@ void ui_update_conn_status(conn_state_t state, const char* name, const char* inf
 }
 
 void ui_update_battery(int percent, bool charging) {
-    int idx;
-    if (charging) {
-        idx = 4;
-    } else if (percent < 0) {
-        idx = 0;
-    } else if (percent <= 10) {
-        idx = 0;
-    } else if (percent <= 35) {
-        idx = 1;
-    } else if (percent <= 75) {
-        idx = 2;
-    } else {
-        idx = 3;
+    if (!battery_lbl) return;
+
+    if (percent < 0) {          // PMU hasn't reported a level yet
+        lv_label_set_text(battery_lbl, "--%");
+        lv_obj_set_style_text_color(battery_lbl, COL_DIM, 0);
+        apply_battery_visibility();
+        return;
     }
-    lv_image_set_src(battery_img, &battery_dscs[idx]);
+    if (percent > 100) percent = 100;
+
+    lv_color_t col = COL_GREEN;
+    if      (percent <= 20) col = COL_RED;
+    else if (percent <= 50) col = COL_AMBER;
+
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%s%d%%", charging ? "+" : "", percent);
+    lv_label_set_text(battery_lbl, buf);
+    lv_obj_set_style_text_color(battery_lbl, col, 0);
     apply_battery_visibility();
 }
