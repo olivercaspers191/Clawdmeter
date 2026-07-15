@@ -75,6 +75,14 @@ bool idle_is_asleep(void) {
     return state == STATE_ASLEEP || state == STATE_FADING_OUT;
 }
 
+bool idle_should_deep_sleep(void) {
+    // Only once the panel is fully dark (STATE_ASLEEP) and we've stayed idle past
+    // the deep-sleep threshold. idle_tick() keeps last_activity_ms fresh while USB
+    // power is present (see IDLE_SLEEP_WHEN_CHARGING), so this never trips on USB.
+    return state == STATE_ASLEEP &&
+           (millis() - last_activity_ms) >= IDLE_DEEPSLEEP_TIMEOUT_MS;
+}
+
 void idle_tick(void) {
     uint32_t now = millis();
 
@@ -90,7 +98,7 @@ void idle_tick(void) {
 
     switch (state) {
     case STATE_AWAKE:
-        if (now - last_activity_ms >= IDLE_TIMEOUT_MS) {
+        if (now - last_activity_ms >= IDLE_DIM_TIMEOUT_MS) {
             begin_fade(0, now);
             state = STATE_FADING_OUT;
         }

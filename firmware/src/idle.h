@@ -20,3 +20,8 @@ bool idle_consume_wake_press(void);
 // sleeves, etc.). Callers use this to silently drop touch events while the
 // panel is dark.
 bool idle_is_asleep(void);
+
+// True once the screen has been dark long enough (IDLE_DEEPSLEEP_TIMEOUT_MS) to
+// warrant real deep sleep. The caller stashes state and calls
+// power_sleep_enter_deep(). Never true on USB power.
+bool idle_should_deep_sleep(void);

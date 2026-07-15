@@ -24,3 +24,5 @@ bool power_hal_pwr_pressed(void) { return false; }
 // or the 1.8" (software hold-timing off a polled GPIO) port. Stub = no gesture.
 bool power_hal_pwr_long_pressed(void) { return false; }
 bool power_hal_pwr_released(void) { return false; }
+// Return an ext1 wake-pin bitmask (buttons/touch INT) to enable deep sleep.
+uint64_t power_hal_deep_sleep_wake_mask(void) { return 0; }

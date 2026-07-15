@@ -91,3 +91,10 @@ bool power_hal_pwr_released(void) {
     if (pwr_released_flag) { pwr_released_flag = false; return true; }
     return false;
 }
+
+uint64_t power_hal_deep_sleep_wake_mask(void) {
+    // BOOT (GPIO0), right button (GPIO18) and touch INT (GPIO11) — all
+    // RTC-capable, active-low, idle-high via pullup. A press or a screen tap
+    // pulls one low and wakes the device (ext1 ANY_LOW).
+    return (1ULL << BTN_BACK_GPIO) | (1ULL << BTN_FWD_GPIO) | (1ULL << TP_INT);
+}

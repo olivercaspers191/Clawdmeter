@@ -9,12 +9,21 @@
 #define STABLE_TIME_MS    300    // orientation must hold this long before rotating
 #define TILT_THRESHOLD    0.5f   // ~30° from axis (sin 30° ≈ 0.5)
 
+// Shake detection: at rest |accel| ≈ 1g; a deliberate shake swings it well past
+// this. Require a couple of over-threshold samples so a single desk bump doesn't
+// trip it. Only consumed while the display is dozing, so false trips are cheap.
+#define SHAKE_G_THRESH    0.55f  // deviation from 1g counting as fast motion
+#define SHAKE_HITS        2      // over-threshold samples needed to latch a shake
+
 static SensorQMI8658 imu;
 static uint8_t  current_rotation   = 0;
 static uint8_t  candidate_rotation = 0;
 static uint32_t candidate_since    = 0;
 static uint32_t last_poll_ms       = 0;
 static bool     imu_ok             = false;
+static bool     rotation_enabled   = true;
+static bool     shake_latched      = false;
+static uint8_t  shake_count        = 0;
 
 static uint8_t accel_to_rotation(float ax, float ay) {
     float abs_ax = fabsf(ax);
@@ -49,6 +58,21 @@ void imu_hal_tick(void) {
     float ax, ay, az;
     if (!imu.getAccelerometer(ax, ay, az)) return;
 
+    // --- shake detection (runs regardless of the rotation lock) ---
+    float mag = sqrtf(ax * ax + ay * ay + az * az);
+    if (fabsf(mag - 1.0f) > SHAKE_G_THRESH) {
+        if (shake_count < SHAKE_HITS) shake_count++;
+        if (shake_count >= SHAKE_HITS) shake_latched = true;
+    } else if (shake_count > 0) {
+        shake_count--;
+    }
+
+    // --- auto-rotation (frozen while locked) ---
+    if (!rotation_enabled) {
+        candidate_rotation = current_rotation;
+        return;
+    }
+
     uint8_t target = accel_to_rotation(ax, ay);
     if (target == 255 || target == current_rotation) {
         candidate_rotation = current_rotation;
@@ -64,3 +88,13 @@ void imu_hal_tick(void) {
 }
 
 uint8_t imu_hal_rotation_quadrant(void) { return current_rotation; }
+
+void imu_hal_set_rotation_enabled(bool en) { rotation_enabled = en; }
+bool imu_hal_rotation_enabled(void)        { return rotation_enabled; }
+
+bool imu_hal_consume_shake(void) {
+    bool s = shake_latched;
+    shake_latched = false;
+    shake_count = 0;
+    return s;
+}

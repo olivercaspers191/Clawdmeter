@@ -12,6 +12,8 @@
 #include "idle.h"
 #include "idle_cfg.h"
 #include "brightness.h"
+#include "power_sleep.h"
+#include "autorotate.h"
 
 #include "hal/board_caps.h"
 #include "hal/display_hal.h"
@@ -198,6 +200,7 @@ void setup() {
     Serial.println("{\"ready\":true}");
 
     board_init();
+    power_sleep_boot_check();   // latch whether this boot is a deep-sleep wake
 
     display_hal_init();
     display_hal_begin();
@@ -206,6 +209,7 @@ void setup() {
 
     power_hal_init();
     imu_hal_init();
+    autorotate_init();  // restore auto-rotation on/off (right button toggles it)
     sound_hal_init();
     touch_hal_init();
 
@@ -236,7 +240,16 @@ void setup() {
     ui_init();
     ui_update_conn_status(transport_get_state(), transport_get_name(), transport_get_info());
     ui_update_battery(power_hal_battery_pct(), power_hal_is_charging());
-    ui_show_screen(SCREEN_SPLASH);
+
+    // Waking from deep sleep? Show the last usage snapshot from RTC immediately so
+    // the bars are up before WiFi reconnects. Otherwise start on the splash.
+    if (power_sleep_restore(&usage)) {
+        ui_update(&usage);
+        ui_show_screen(SCREEN_USAGE);
+        Serial.println("woke from deep sleep — restored usage from RTC");
+    } else {
+        ui_show_screen(SCREEN_SPLASH);
+    }
 
     Serial.printf("Dashboard ready (%s, %dx%d), waiting for usage data...\n",
         board_caps().name, W, H);
@@ -292,13 +305,44 @@ static void pair_tick(void) {
     }
 }
 
+// For a short window after a deep-sleep wake, swallow physical-button actions so
+// the very press that woke the device doesn't also fire an action (toggle
+// rotation, cycle brightness). millis() starts at 0 each boot.
+static inline bool boot_wake_guard(void) {
+    return power_sleep_woke_from_deep() && millis() < 1500;
+}
+
 void loop() {
     idle_tick();
+
+    // Idle long enough on battery → stash the last usage to RTC and drop into
+    // true deep sleep. Does not return; the chip wakes via tap/button into a
+    // fresh setup() that restores the stashed values.
+    if (idle_should_deep_sleep() && !power_hal_is_vbus_in()) {
+        power_sleep_stash(&usage);
+        power_sleep_enter_deep();
+    }
+
     lv_timer_handler();
     ui_tick_anim();
     transport_tick();
     power_hal_tick();
     imu_hal_tick();
+    // Shake while the screen is dozing (10–30 min, SoC still awake) wakes it.
+    // Costs nothing extra — the IMU is already polled for rotation.
+    if (imu_hal_consume_shake() && idle_is_asleep()) idle_consume_wake_press();
+
+    // Slow the poll cadence once the screen dozes (data isn't visible anyway);
+    // on wake, drop back to the fast cadence and poll immediately so the bars
+    // refresh right away instead of after the slow interval.
+    static bool was_dozing = false;
+    bool dozing = idle_is_asleep();
+    if (dozing != was_dozing) {
+        was_dozing = dozing;
+        transport_set_low_power(dozing);
+        if (!dozing) transport_request_refresh();
+    }
+
     sound_hal_tick();
     splash_tick();
     // Rotation transition (blank + ramp) would fight the idle fade — skip
@@ -340,9 +384,12 @@ void loop() {
             bool secondary_now = input_hal_is_held(INPUT_BTN_SECONDARY);
             if (secondary_now != secondary_was) {
                 if (secondary_now) {
-                    if (idle_consume_wake_press()) secondary_wake_swallowed = true;
-#ifndef USE_WIFI_TRANSPORT
-                    else                            ble_keyboard_press(0x2B, 0x02);  // HID Tab + LEFT_SHIFT
+                    if (idle_consume_wake_press())   secondary_wake_swallowed = true;
+                    else if (boot_wake_guard())      secondary_wake_swallowed = true;
+#ifdef USE_WIFI_TRANSPORT
+                    else                             autorotate_toggle();  // right button toggles rotation
+#else
+                    else                             ble_keyboard_press(0x2B, 0x02);  // HID Tab + LEFT_SHIFT
 #endif
                 } else {
                     if (secondary_wake_swallowed) secondary_wake_swallowed = false;
@@ -355,7 +402,7 @@ void loop() {
         }
 
         if (power_hal_pwr_pressed()) {
-            if (!idle_consume_wake_press()) {
+            if (!idle_consume_wake_press() && !boot_wake_guard()) {
                 // On splash: cycle animations. On the usage view: cycle
                 // screen brightness (single non-splash view, no more screens).
                 if (ui_get_current_screen() == SCREEN_SPLASH) splash_next();

@@ -25,3 +25,9 @@ bool power_hal_pwr_long_pressed(void);
 // Edge-triggered: true once on the PWR release edge, then clears. Completes
 // or cancels the hold-to-pair gesture.
 bool power_hal_pwr_released(void);
+
+// Bitmask of RTC-capable GPIOs that should wake the board from deep sleep via
+// ext1 ANY_LOW (buttons + touch INT — all active-low, idle-high). Return 0 if
+// the board has no deep-sleep wake source; deep sleep is then skipped for it.
+#include <stdint.h>
+uint64_t power_hal_deep_sleep_wake_mask(void);

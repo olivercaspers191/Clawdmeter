@@ -92,3 +92,6 @@ bool power_hal_pwr_released(void) {
     if (pwr_released_flag) { pwr_released_flag = false; return true; }
     return false;
 }
+
+// Deep sleep not wired up for this board yet.
+uint64_t power_hal_deep_sleep_wake_mask(void) { return 0; }

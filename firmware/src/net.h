@@ -23,3 +23,4 @@ const char* net_get_ip(void);     // "192.168.x.x" once associated, else ""
 bool net_has_data(void);          // true when a fresh payload is waiting
 const char* net_get_data(void);   // returns latest JSON; clears the has_data flag
 void net_request_refresh(void);   // force a poll on the next tick (e.g. first boot)
+void net_set_low_power(bool low); // slow the poll cadence while the screen dozes
