@@ -328,8 +328,9 @@ void loop() {
     transport_tick();
     power_hal_tick();
     imu_hal_tick();
-    // Shake while the screen is dozing (10–30 min, SoC still awake) wakes it.
-    // Costs nothing extra — the IMU is already polled for rotation.
+    // Shake while the screen is dozing (15–60 min, SoC still awake) wakes it.
+    // Consume unconditionally so a latch set while awake is discarded rather than
+    // firing an instant wake the moment the screen dozes.
     if (imu_hal_consume_shake() && idle_is_asleep()) idle_consume_wake_press();
 
     // On entering the doze window (screen off, 15–60 min): kill WiFi and drop the

@@ -4,16 +4,19 @@
 #include <Wire.h>
 #include <SensorQMI8658.hpp>
 
-// Poll and hysteresis timing
-#define IMU_POLL_MS       100    // ~10 Hz
+// Poll and hysteresis timing. 40 Hz sampling: rotation only needs ~10 Hz (it has
+// its own 300 ms hysteresis), but shake detection has to out-sample the motion
+// itself — at 10 Hz a ~5 Hz shake aliases and its peaks get missed entirely.
+#define IMU_POLL_MS       25     // ~40 Hz
 #define STABLE_TIME_MS    300    // orientation must hold this long before rotating
 #define TILT_THRESHOLD    0.5f   // ~30° from axis (sin 30° ≈ 0.5)
 
 // Shake detection: at rest |accel| ≈ 1g; a deliberate shake swings it well past
-// this. Require a couple of over-threshold samples so a single desk bump doesn't
-// trip it. Only consumed while the display is dozing, so false trips are cheap.
-#define SHAKE_G_THRESH    0.55f  // deviation from 1g counting as fast motion
-#define SHAKE_HITS        2      // over-threshold samples needed to latch a shake
+// this. Require a few over-threshold samples in a row (~75 ms of real motion) so
+// a single desk bump doesn't trip it. Only consumed while the display is dozing,
+// so a false trip just lights the screen and it re-dozes.
+#define SHAKE_G_THRESH    0.45f  // deviation from 1g counting as fast motion
+#define SHAKE_HITS        3      // over-threshold samples needed to latch a shake
 
 static SensorQMI8658 imu;
 static uint8_t  current_rotation   = 0;
@@ -41,9 +44,14 @@ void imu_hal_init(void) {
         return;
     }
     Serial.println("QMI8658 init OK");
+    // 128 Hz low-power ODR (valid while the gyro stays disabled). The LPF cutoff
+    // is a fraction of ODR — LPF_MODE_3 is the *least* filtered option at 13.37%
+    // of ODR — so the old 21 Hz ODR meant a ~2.8 Hz cutoff that smoothed shakes
+    // away. At 128 Hz the cutoff is ~17 Hz, which passes a 3–8 Hz shake intact
+    // while still being gentle enough for stable tilt/rotation.
     imu.configAccelerometer(
         SensorQMI8658::ACC_RANGE_4G,
-        SensorQMI8658::ACC_ODR_LOWPOWER_21Hz,
+        SensorQMI8658::ACC_ODR_LOWPOWER_128Hz,
         SensorQMI8658::LPF_MODE_3);
     imu.enableAccelerometer();
     imu_ok = true;
@@ -62,7 +70,10 @@ void imu_hal_tick(void) {
     float mag = sqrtf(ax * ax + ay * ay + az * az);
     if (fabsf(mag - 1.0f) > SHAKE_G_THRESH) {
         if (shake_count < SHAKE_HITS) shake_count++;
-        if (shake_count >= SHAKE_HITS) shake_latched = true;
+        if (shake_count >= SHAKE_HITS && !shake_latched) {
+            shake_latched = true;
+            Serial.printf("imu: shake detected (|a|=%.2fg)\n", mag);
+        }
     } else if (shake_count > 0) {
         shake_count--;
     }
@@ -93,8 +104,11 @@ void imu_hal_set_rotation_enabled(bool en) { rotation_enabled = en; }
 bool imu_hal_rotation_enabled(void)        { return rotation_enabled; }
 
 bool imu_hal_consume_shake(void) {
+    // Clear the latch only — NOT shake_count. This is polled every loop (~5 ms)
+    // while imu_hal_tick() samples every IMU_POLL_MS, so zeroing the counter here
+    // wiped it between every sample and it could never reach SHAKE_HITS. Let the
+    // counter decay naturally in the tick instead.
     bool s = shake_latched;
     shake_latched = false;
-    shake_count = 0;
     return s;
 }
