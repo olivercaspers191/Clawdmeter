@@ -13,12 +13,11 @@
 #error "Create firmware/src/wifi_config.h from wifi_config.example.h (WIFI_SSID/WIFI_PASS/USAGE_URL)."
 #endif
 
-static const uint32_t POLL_INTERVAL_ACTIVE_MS = 60000;   // 1 min while the screen is on
-static const uint32_t POLL_INTERVAL_IDLE_MS   = 300000;  // 5 min while dozing (screen off)
+static const uint32_t POLL_INTERVAL_MS = 60000;  // 1 min while the screen is on
 static const uint32_t WIFI_RETRY_MS    = 5000;
 static const uint32_t HTTP_TIMEOUT_MS  = 5000;
 
-static uint32_t poll_interval_ms = POLL_INTERVAL_ACTIVE_MS;
+static bool asleep = false;   // true while dozing: radio off, no polling
 
 static net_state_t state = NET_STATE_INIT;
 static char        rx_buf[768];
@@ -66,6 +65,8 @@ static void do_poll(void) {
 }
 
 void net_tick(void) {
+    if (asleep) return;   // radio is off while the display dozes
+
     if (WiFi.status() != WL_CONNECTED) {
         if (state == NET_STATE_CONNECTED) state = NET_STATE_DISCONNECTED;
         uint32_t now = millis();
@@ -81,7 +82,7 @@ void net_tick(void) {
     // Associated. Stay CONNECTING (UI shows the connect hint) until the first
     // successful poll flips us to CONNECTED inside do_poll().
     uint32_t now = millis();
-    if (force_poll || last_poll_ms == 0 || (now - last_poll_ms) >= poll_interval_ms) {
+    if (force_poll || last_poll_ms == 0 || (now - last_poll_ms) >= POLL_INTERVAL_MS) {
         force_poll = false;
         last_poll_ms = now;
         do_poll();
@@ -107,10 +108,28 @@ const char* net_get_data(void) {
 
 void net_request_refresh(void) { force_poll = true; }
 
-void net_set_low_power(bool low) {
-    // Slow the poll cadence while the screen is dozing (data isn't visible then;
-    // a wake force-polls immediately). Keeps the radio idle more of the time.
-    poll_interval_ms = low ? POLL_INTERVAL_IDLE_MS : POLL_INTERVAL_ACTIVE_MS;
+void net_sleep(void) {
+    // Screen is dozing — kill the radio entirely (the biggest awake-window draw
+    // we can shed while still polling the IMU for a shake).
+    if (asleep) return;
+    asleep = true;
+    WiFi.disconnect(true, false);
+    WiFi.mode(WIFI_OFF);
+    state = NET_STATE_DISCONNECTED;
+    Serial.println("net: WiFi off (dozing)");
+}
+
+void net_wake(void) {
+    // Woken by tap/shake/button — bring the radio back and poll immediately.
+    if (!asleep) return;
+    asleep = false;
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    state = NET_STATE_CONNECTING;
+    last_wifi_attempt_ms = millis();
+    last_poll_ms = 0;
+    force_poll = true;
+    Serial.println("net: WiFi back on (woke)");
 }
 
 #endif // USE_WIFI_TRANSPORT

@@ -332,15 +332,21 @@ void loop() {
     // Costs nothing extra — the IMU is already polled for rotation.
     if (imu_hal_consume_shake() && idle_is_asleep()) idle_consume_wake_press();
 
-    // Slow the poll cadence once the screen dozes (data isn't visible anyway);
-    // on wake, drop back to the fast cadence and poll immediately so the bars
-    // refresh right away instead of after the slow interval.
+    // On entering the doze window (screen off, 15–60 min): kill WiFi and drop the
+    // CPU to 80 MHz — the display isn't visible so the only job is watching the
+    // IMU for a shake. On wake: full clock first (WiFi needs it), radio back on,
+    // immediate poll so the bars refresh right away.
     static bool was_dozing = false;
     bool dozing = idle_is_asleep();
     if (dozing != was_dozing) {
         was_dozing = dozing;
-        transport_set_low_power(dozing);
-        if (!dozing) transport_request_refresh();
+        if (dozing) {
+            transport_sleep();
+            setCpuFrequencyMhz(80);
+        } else {
+            setCpuFrequencyMhz(240);
+            transport_wake();
+        }
     }
 
     sound_hal_tick();

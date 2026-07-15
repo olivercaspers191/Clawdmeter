@@ -25,7 +25,8 @@
   inline void        transport_send_ack(void)    {}
   inline void        transport_send_nack(void)   {}
   inline void        transport_request_refresh(void) { net_request_refresh(); }
-  inline void        transport_set_low_power(bool low) { net_set_low_power(low); }
+  inline void        transport_sleep(void)       { net_sleep(); }  // radio off while dozing
+  inline void        transport_wake(void)        { net_wake(); }   // radio on + poll on wake
 #else
   #include "ble.h"
   typedef ble_state_t conn_state_t;
@@ -43,5 +44,6 @@
   inline void        transport_send_ack(void)    { ble_send_ack(); }
   inline void        transport_send_nack(void)   { ble_send_nack(); }
   inline void        transport_request_refresh(void) { ble_request_refresh(); }
-  inline void        transport_set_low_power(bool /*low*/) {}  // BLE: daemon owns cadence
+  inline void        transport_sleep(void)       {}  // BLE stays connected; daemon owns cadence
+  inline void        transport_wake(void)        {}
 #endif
