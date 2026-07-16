@@ -18,6 +18,15 @@
 #define SHAKE_G_THRESH    0.45f  // deviation from 1g counting as fast motion
 #define SHAKE_HITS        3      // over-threshold samples needed to latch a shake
 
+// The panel is mounted a quarter-turn off in the enclosure, so the IMU's native
+// quadrant 0 (flat on a desk — the boot/wake default) renders 90° clockwise from
+// upright. This base offset is added to every reported quadrant, so quadrant 0
+// comes up upright AND all four auto-rotate positions shift by the same amount,
+// staying consistent. Units are 90° clockwise steps.
+//   3 = 270° CW = 90° CCW  (corrects a display that looks rotated 90° CW)
+//   1 =  90° CW            (use this if 3 turns out the wrong way)
+#define ROTATION_BASE_QUADRANT  3
+
 static SensorQMI8658 imu;
 static uint8_t  current_rotation   = 0;
 static uint8_t  candidate_rotation = 0;
@@ -98,7 +107,12 @@ void imu_hal_tick(void) {
     }
 }
 
-uint8_t imu_hal_rotation_quadrant(void) { return current_rotation; }
+uint8_t imu_hal_rotation_quadrant(void) {
+    // Offset applied only at the output: the internal state machine and
+    // accel_to_rotation() keep working in IMU-native quadrants; the display and
+    // its change-detection both read through here, so they stay in agreement.
+    return (uint8_t)((current_rotation + ROTATION_BASE_QUADRANT) & 3);
+}
 
 void imu_hal_set_rotation_enabled(bool en) { rotation_enabled = en; }
 bool imu_hal_rotation_enabled(void)        { return rotation_enabled; }
