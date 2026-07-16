@@ -102,9 +102,9 @@ void display_hal_draw_bitmap(int32_t x, int32_t y, int32_t w, int32_t h,
 // orientation, then ramp brightness back up over ~125ms so the transition
 // reads as deliberate.
 void display_hal_tick(void) {
-    // Seed from the real initial quadrant, not 0: with a non-zero rotation base
-    // offset the first tick would otherwise read a "changed" rotation and fire a
-    // spurious blank-and-ramp on every boot.
+    // Seed from the real initial quadrant, not 0: the default rotation quadrant
+    // is non-zero, so the first tick would otherwise read a "changed" rotation
+    // and fire a spurious blank-and-ramp on every boot.
     static uint8_t  last_rotation = imu_hal_rotation_quadrant();
     static uint8_t  ramp_step = 0;     // 0=idle, 1..4=ramping
     static uint32_t ramp_last = 0;
