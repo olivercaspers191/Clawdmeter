@@ -1,4 +1,5 @@
 #include "power_sleep.h"
+#include "power_log.h"
 #include "hal/power_hal.h"
 #include <Arduino.h>
 #include <esp_sleep.h>
@@ -15,7 +16,8 @@
 RTC_DATA_ATTR static uint32_t  rtc_magic = 0;
 RTC_DATA_ATTR static UsageData rtc_usage;
 
-static bool woke_from_deep = false;
+static bool woke_from_deep  = false;
+static bool woke_from_timer = false;
 
 void power_sleep_boot_check(void) {
     esp_sleep_wakeup_cause_t c = esp_sleep_get_wakeup_cause();
@@ -23,10 +25,13 @@ void power_sleep_boot_check(void) {
                       c == ESP_SLEEP_WAKEUP_EXT0 ||
                       c == ESP_SLEEP_WAKEUP_GPIO ||
                       c == ESP_SLEEP_WAKEUP_TIMER);
-    Serial.printf("power: boot wake cause=%d (deep=%d)\n", (int)c, (int)woke_from_deep);
+    woke_from_timer = (c == ESP_SLEEP_WAKEUP_TIMER);
+    Serial.printf("power: boot wake cause=%d (deep=%d timer=%d)\n",
+                  (int)c, (int)woke_from_deep, (int)woke_from_timer);
 }
 
-bool power_sleep_woke_from_deep(void) { return woke_from_deep; }
+bool power_sleep_woke_from_deep(void)  { return woke_from_deep; }
+bool power_sleep_woke_from_timer(void) { return woke_from_timer; }
 
 bool power_sleep_restore(UsageData* d) {
     if (!d || !woke_from_deep || rtc_magic != STASH_MAGIC || !rtc_usage.valid) return false;
@@ -48,9 +53,15 @@ void power_sleep_enter_deep(void) {
     Serial.flush();
 
 #ifdef USE_WIFI_TRANSPORT
-    WiFi.disconnect(true, false);
-    WiFi.mode(WIFI_OFF);
-    esp_wifi_stop();
+    // Only tear WiFi down if this boot ever brought it up. On a power-log timer
+    // wake it never did, and Arduino's WiFi.mode() would initialise the stack —
+    // powering the radio on — just to switch it off again. esp_deep_sleep_start()
+    // cuts the radio regardless; this is only for a clean disassociation.
+    if (!woke_from_timer) {
+        WiFi.disconnect(true, false);
+        WiFi.mode(WIFI_OFF);
+        esp_wifi_stop();
+    }
 #endif
 
     // Hold the wake pins high through sleep (RTC pullups) so a press/tap pulling
@@ -63,6 +74,13 @@ void power_sleep_enter_deep(void) {
         }
     }
     esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ANY_LOW);
+
+    // Also wake on a timer, purely to sample the battery into the power log and
+    // go straight back down (see the fast path in setup()). This is how deep
+    // sleep's real draw gets measured — without it the log has an 8-hour hole
+    // and we'd be guessing again.
+    esp_sleep_enable_timer_wakeup(PLOG_SLEEP_WAKE_US);
+
     esp_deep_sleep_start();
     // unreachable — chip resets on wake and re-runs setup()
 }

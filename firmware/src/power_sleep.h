@@ -14,6 +14,7 @@ void power_sleep_boot_check(void);
 
 // True if this boot was triggered by a deep-sleep wake source (button/touch).
 bool power_sleep_woke_from_deep(void);
+bool power_sleep_woke_from_timer(void);   // woke only to sample the power log
 
 // If this is a deep-sleep wake and the RTC stash is valid, copies it into *d
 // and returns true. Returns false on cold boot or empty/garbage RTC memory.

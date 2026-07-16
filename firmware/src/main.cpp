@@ -13,6 +13,7 @@
 #include "idle_cfg.h"
 #include "brightness.h"
 #include "power_sleep.h"
+#include "power_log.h"
 #include "autorotate.h"
 
 #include "hal/board_caps.h"
@@ -181,6 +182,8 @@ static void check_serial_cmd() {
             cmd_buf[cmd_pos] = '\0';
             if (strcmp(cmd_buf, "screenshot") == 0) send_screenshot();
             else if (strcmp(cmd_buf, "buzz") == 0)  sound_hal_play_reset();
+            else if (strcmp(cmd_buf, "powerlog") == 0)      power_log_dump();
+            else if (strcmp(cmd_buf, "powerlogclear") == 0) power_log_clear();
             cmd_pos = 0;
         } else if (cmd_pos < CMD_BUF_SIZE - 1) {
             cmd_buf[cmd_pos++] = c;
@@ -201,6 +204,21 @@ void setup() {
 
     board_init();
     power_sleep_boot_check();   // latch whether this boot is a deep-sleep wake
+    power_log_boot();
+
+    // Deep-sleep timer wake: we're up only to record a battery sample. Bring up
+    // the PMU (I2C only — board_init() already started Wire), log, and drop
+    // straight back into deep sleep. Skipping display/LVGL/WiFi keeps this to
+    // ~100 ms, so sampling doesn't meaningfully add to the drain it measures.
+    // If USB appeared while we slept, fall through to a normal boot instead.
+    if (power_sleep_woke_from_timer()) {
+        power_hal_init();
+        if (!power_hal_is_vbus_in()) {
+            power_log_sample(PLOG_DEEP);
+            power_sleep_enter_deep();   // no return
+        }
+        Serial.println("power: timer wake with USB present — booting normally");
+    }
 
     display_hal_init();
     display_hal_begin();
@@ -250,6 +268,8 @@ void setup() {
     } else {
         ui_show_screen(SCREEN_SPLASH);
     }
+
+    power_log_sample(power_sleep_woke_from_deep() ? PLOG_WAKE : PLOG_BOOT);
 
     Serial.printf("Dashboard ready (%s, %dx%d), waiting for usage data...\n",
         board_caps().name, W, H);
@@ -348,7 +368,10 @@ void loop() {
             setCpuFrequencyMhz(240);
             transport_wake();
         }
+        power_log_sample(dozing ? PLOG_DOZE : PLOG_WAKE);   // mark the transition
     }
+
+    power_log_tick(dozing ? PLOG_DOZE : PLOG_ACTIVE);
 
     sound_hal_tick();
     splash_tick();
@@ -456,6 +479,7 @@ void loop() {
                 if (splash_is_active()) splash_pick_for_current_rate();
             }
             ui_update(&usage);
+            power_log_set_wall_clock(usage.clock_epoch);   // so the log reads in real clock time
             transport_send_ack();
         } else {
             transport_send_nack();
