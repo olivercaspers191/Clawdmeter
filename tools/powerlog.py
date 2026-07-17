@@ -68,9 +68,12 @@ def report(rows):
     if len(rows) < 2:
         sys.exit(f"not enough samples to measure a slope ({len(rows)})")
 
-    # Attribute each interval to the phase it was spent in. The phase of the
-    # *later* sample is what that interval was in: a sample is written on
-    # entering a phase, so the span that follows it carries that phase.
+    # Attribute each interval to the phase it was spent in — the phase of the
+    # *earlier* sample. A sample records the phase in force at that instant, and
+    # every phase change writes a sample at the moment it happens, so the span
+    # after a sample was spent wholly in that sample's phase. (Using the later
+    # sample instead charges each transition's preceding span to the new phase,
+    # which smears up to one interval of the old phase's drain into the new one.)
     spans = {p: {"secs": 0, "drop": 0.0} for p in PHASES}
     charging_secs = 0
 
@@ -83,7 +86,7 @@ def report(rows):
         if a["charging"] or b["charging"] or a["vbus"] or b["vbus"]:
             charging_secs += dt           # on USB: drain is meaningless
             continue
-        s = spans.setdefault(b["phase"], {"secs": 0, "drop": 0.0})
+        s = spans.setdefault(a["phase"], {"secs": 0, "drop": 0.0})
         s["secs"] += dt
         s["drop"] += a["pct"] - b["pct"]  # positive = discharging
 
@@ -133,6 +136,11 @@ def main():
 
     if not args.mah:
         print("\n(pass --mah <capacity> to convert %/hour into mA)")
+
+    print("\nNote: the AXP2101 reports battery % from voltage, not a coulomb\n"
+          "count, so load changes move it independently of real charge. Rates\n"
+          "over short windows (< ~2 h) are unreliable; long, constant-load\n"
+          "windows like an overnight deep-sleep run are the trustworthy ones.")
 
 
 if __name__ == "__main__":
