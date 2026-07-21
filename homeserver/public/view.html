@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clawdmeter</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Clawdmeter">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+/* Same fonts the firmware renders with (assets/*.otf, served by the service). */
+@font-face {
+  font-family: 'Styrene B';
+  src: url('font/styrene.otf') format('opentype');
+  font-weight: 400; font-display: swap;
+}
+@font-face {
+  font-family: 'Tiempos Text';
+  src: url('font/tiempos.otf') format('opentype');
+  font-weight: 400; font-display: swap;
+}
+
+/* Design tokens — mirrored 1:1 from firmware/src/theme.h. */
+:root {
+  --bg:     #000000;
+  --panel:  #1f1f1e;
+  --text:   #faf9f5;
+  --dim:    #b0aea5;
+  --accent: #d97757;
+  --green:  #788c5d;
+  --amber:  #d97757;
+  --red:    #c0392b;
+  --bar-bg: #2a2a28;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Styrene B', system-ui, -apple-system, sans-serif;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  /* Standalone PWA draws under the status bar; keep content clear of it. */
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 480px;      /* the panel's own width — keeps proportions on tablets */
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- header: crab · status · (spacer), same row order as the 3-panel view ---- */
+header {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+header img {
+  width: 48px; height: 48px;
+  image-rendering: pixelated;   /* 80x80 pixel art — never smooth it */
+}
+#status {
+  grid-column: 2;
+  text-align: center;
+  font-family: ui-monospace, 'DejaVu Sans Mono', monospace;
+  font-size: 19px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#status.stale { color: var(--dim); }
+
+/* ---- usage panel ---- */
+.panel {
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.panel[hidden] { display: none; }
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pct {
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.5px;
+}
+.pill {
+  background: var(--bar-bg);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 17px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.bar {
+  height: 16px;
+  background: var(--bar-bg);
+  border-radius: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+.fill {
+  height: 100%;
+  width: 0;
+  border-radius: 6px;
+  background: var(--green);
+  transition: width .6s ease, background-color .6s ease;
+}
+.reset {
+  color: var(--dim);
+  font-size: 17px;
+  margin-top: 10px;
+}
+
+/* ---- error / offline banner ---- */
+#err {
+  color: var(--dim);
+  font-size: 15px;
+  text-align: center;
+  margin-top: 4px;
+  min-height: 1.2em;
+}
+
+/* The device animates a spinner; respect a user who doesn't want motion. */
+@media (prefers-reduced-motion: reduce) {
+  .fill { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="logo.png" alt="Clawdmeter" width="48" height="48">
+    <div id="status">Connecting…</div>
+  </header>
+
+  <section class="panel" id="p-session">
+    <div class="top"><span class="pct" id="s-pct">--%</span><span class="pill">Current</span></div>
+    <div class="bar"><div class="fill" id="s-bar"></div></div>
+    <div class="reset" id="s-reset">---</div>
+  </section>
+
+  <section class="panel" id="p-weekly">
+    <div class="top"><span class="pct" id="w-pct">--%</span><span class="pill">Weekly</span></div>
+    <div class="bar"><div class="fill" id="w-bar"></div></div>
+    <div class="reset" id="w-reset">---</div>
+  </section>
+
+  <!-- Per-model weekly bar (Fable). Hidden until the payload carries "f",
+       exactly like the firmware's panel_fable. -->
+  <section class="panel" id="p-fable" hidden>
+    <div class="top"><span class="pct" id="f-pct">--%</span><span class="pill" id="f-pill">Fable 1W</span></div>
+    <div class="bar"><div class="fill" id="f-bar"></div></div>
+    <div class="reset" id="f-reset">---</div>
+  </section>
+
+  <div id="err"></div>
+</div>
+
+<script>
+'use strict';
+
+const POLL_MS       = 30000;   // background refresh cadence
+const DATA_FRESH_MS = 90000;   // matches the firmware's DATA_FRESH_MS
+const $ = (id) => document.getElementById(id);
+
+// ---- colour thresholds: firmware ui.cpp pct_color() ----
+function pctColor(p) {
+  if (p >= 80) return 'var(--red)';
+  if (p >= 50) return 'var(--amber)';
+  return 'var(--green)';
+}
+
+// ---- firmware ui.cpp format_reset_time() ----
+function formatReset(mins) {
+  if (mins == null || mins < 0) return '---';
+  if (mins < 60)   return `Resets in ${mins}m`;
+  if (mins < 1440) return `Resets in ${Math.floor(mins / 60)}h ${mins % 60}m`;
+  return `Resets in ${Math.floor(mins / 1440)}d ${Math.floor((mins % 1440) / 60)}h`;
+}
+
+// ---- animated status line: firmware ui_tick_anim() ----
+const SPINNER    = ['·', '✻', '✽', '✶', '✳', '✢'];
+const SPINNER_MS = [260, 130, 130, 130, 130, 260];
+const MSG_MS     = 4000;
+const MESSAGES = [
+  'Accomplishing', 'Elucidating', 'Perusing', 'Actioning', 'Enchanting',
+  'Philosophising', 'Actualizing', 'Envisioning', 'Pondering', 'Baking',
+  'Finagling', 'Pontificating', 'Booping', 'Brewing', 'Forging', 'Puttering',
+  'Calculating', 'Cerebrating', 'Frolicking', 'Reticulating', 'Channelling',
+  'Generating', 'Ruminating', 'Churning', 'Germinating', 'Scheming',
+  'Clauding', 'Hatching', 'Schlepping', 'Coalescing', 'Herding', 'Shimmying',
+  'Cogitating', 'Honking', 'Shucking', 'Combobulating', 'Hustling',
+  'Simmering', 'Computing', 'Ideating', 'Smooshing', 'Concocting', 'Imagining',
+  'Spelunking', 'Conjuring', 'Incubating', 'Spinning', 'Considering',
+  'Inferring', 'Stewing', 'Contemplating', 'Jiving', 'Sussing', 'Cooking',
+  'Manifesting', 'Synthesizing', 'Working', 'Wrangling',
+];
+
+let spinPhase = 0, msgIdx = Math.floor(Math.random() * MESSAGES.length);
+let spinAt = 0, msgAt = 0;
+
+// Ping-pong 0..5..0, like the firmware's SPINNER_PHASES.
+function spinnerFrame() {
+  const n = SPINNER.length;
+  return spinPhase < n ? spinPhase : 2 * (n - 1) - spinPhase;
+}
+
+let lastOk = 0;          // Date.now() of the last successful fetch
+let lastPayload = null;
+let lastMins = null;     // reset minutes as fetched, decremented locally
+
+function tickStatus(now) {
+  const el = $('status');
+  const fresh = lastOk && (now - lastOk) < DATA_FRESH_MS;
+
+  if (!fresh) {
+    // The firmware drops to its idle "Zzz" screen rather than showing stale
+    // numbers as if live. Same idea: say so instead of quietly lying.
+    el.classList.add('stale');
+    el.textContent = lastOk
+      ? `Stale · ${Math.round((now - lastOk) / 60000)}m ago`
+      : 'Connecting…';
+    return;
+  }
+
+  el.classList.remove('stale');
+  const i = spinnerFrame();
+  if (now - spinAt >= SPINNER_MS[i]) {
+    spinAt = now;
+    spinPhase = (spinPhase + 1) % (2 * (SPINNER.length - 1));
+  }
+  if (now - msgAt >= MSG_MS) {
+    msgAt = now;
+    msgIdx = (msgIdx + 1) % MESSAGES.length;
+  }
+  el.textContent = `${SPINNER[spinnerFrame()]} ${MESSAGES[msgIdx]}…`;
+}
+
+// Reset countdowns tick down locally between polls, so the numbers stay honest
+// for the 30s a payload is held rather than freezing at the fetched value.
+function tickResets(now) {
+  if (!lastMins) return;
+  const elapsed = Math.floor((now - lastOk) / 60000);
+  const dec = (m) => (m == null ? null : Math.max(0, m - elapsed));
+  $('s-reset').textContent = formatReset(dec(lastMins.s));
+  $('w-reset').textContent = formatReset(dec(lastMins.w));
+  if (lastMins.f != null) $('f-reset').textContent = formatReset(dec(lastMins.f));
+}
+
+function setPanel(prefix, pct) {
+  $(`${prefix}-pct`).textContent = `${Math.round(pct)}%`;
+  const bar = $(`${prefix}-bar`);
+  bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  bar.style.backgroundColor = pctColor(pct);
+}
+
+function render(d) {
+  setPanel('s', d.s ?? 0);
+  setPanel('w', d.w ?? 0);
+
+  // Fable present -> reveal the third panel; absent -> hide it, matching the
+  // firmware's 3-panel <-> 2-panel reflow when the model leaves the plan.
+  const hasFable = typeof d.f === 'number';
+  $('p-fable').hidden = !hasFable;
+  if (hasFable) {
+    setPanel('f', d.f);
+    $('f-pill').textContent = `${d.fn || 'Model'} 1W`;
+  }
+
+  lastMins = { s: d.sr, w: d.wr, f: hasFable ? d.fr : null };
+  tickResets(Date.now());
+}
+
+async function poll() {
+  try {
+    const res = await fetch('usage', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    if (!d.ok) throw new Error(d.error || 'service reported not-ok');
+    lastPayload = d;
+    lastOk = Date.now();
+    $('err').textContent = '';
+    render(d);
+  } catch (e) {
+    // Keep the last-known panels on screen but let the header go stale — the
+    // numbers are still true as of lastOk, and the header says how old that is.
+    $('err').textContent = lastPayload
+      ? `Can't reach the homeserver (${e.message})`
+      : `No data: ${e.message}`;
+  }
+}
+
+function frame() {
+  const now = Date.now();
+  tickStatus(now);
+  tickResets(now);
+  requestAnimationFrame(frame);
+}
+
+poll();
+setInterval(poll, POLL_MS);
+requestAnimationFrame(frame);
+
+// Refresh the moment the app is reopened — the whole point is a fast glance,
+// and a backgrounded tab's interval is throttled hard by the browser.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') poll();
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

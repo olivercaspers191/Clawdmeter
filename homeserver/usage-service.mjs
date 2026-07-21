@@ -21,7 +21,8 @@
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ---- config -----------------------------------------------------------------
 const PORT = Number(process.env.CLAWD_PORT || 8090);
@@ -221,6 +222,51 @@ async function buildPayload() {
   };
 }
 
+// ---- static assets for the web view (PWA) -----------------------------------
+// A phone/watch-friendly view of the same data at GET /. Purely additive: the
+// firmware's /usage contract is untouched.
+//
+// Routes are an explicit allowlist mapping URL -> file on disk, rather than a
+// directory server, so no request can ever escape into the repo (or ~/.claude,
+// which sits next door and holds the OAuth tokens).
+const HERE = dirname(fileURLToPath(import.meta.url));
+const PUBLIC = join(HERE, 'public');
+const ASSETS = join(HERE, '..', 'assets');
+
+const HTML = 'text/html; charset=utf-8';
+const IMMUTABLE = 'public, max-age=31536000, immutable';
+const NO_CACHE = 'no-cache';   // revalidate: lets an edited page/SW reach the phone
+
+// null-prototype: a plain object literal would make GET /constructor (and
+// friends) resolve to an inherited Object.prototype member. Today's keys all
+// start with "/" so that can't collide, but that's an easy invariant to break.
+const STATIC = Object.assign(Object.create(null), {
+  '/':                      [join(PUBLIC, 'view.html'), HTML, NO_CACHE],
+  '/index.html':            [join(PUBLIC, 'view.html'), HTML, NO_CACHE],
+  // Must revalidate, or a stale worker pins the app to an old shell forever.
+  '/sw.js':                 [join(PUBLIC, 'sw.js'), 'text/javascript; charset=utf-8', NO_CACHE],
+  '/manifest.webmanifest':  [join(PUBLIC, 'manifest.webmanifest'), 'application/manifest+json', NO_CACHE],
+  '/icon-192.png':          [join(PUBLIC, 'icon-192.png'), 'image/png', IMMUTABLE],
+  '/icon-512.png':          [join(PUBLIC, 'icon-512.png'), 'image/png', IMMUTABLE],
+  // Served straight from assets/ — the same art and typefaces the panel uses.
+  '/logo.png':              [join(ASSETS, 'logo_80.png'), 'image/png', IMMUTABLE],
+  '/font/styrene.otf':      [join(ASSETS, 'StyreneB-Regular.otf'), 'font/otf', IMMUTABLE],
+  '/font/tiempos.otf':      [join(ASSETS, 'TiemposText-400-Regular.otf'), 'font/otf', IMMUTABLE],
+});
+
+async function serveStatic(entry, res) {
+  const [file, type, cache] = entry;
+  try {
+    const body = await readFile(file);   // small files, read per request — the SW caches client-side
+    res.writeHead(200, { 'content-type': type, 'cache-control': cache });
+    res.end(body);
+  } catch (e) {
+    log(`static ${file}: ${e.code || e.message}`);
+    res.writeHead(404, { 'content-type': 'text/plain' });
+    res.end('not found\n');
+  }
+}
+
 // ---- refresh loop + HTTP server ---------------------------------------------
 let cached = null;
 let lastError = null;
@@ -253,6 +299,11 @@ const server = createServer((req, res) => {
   if (url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: !!cached, lastOkAt, lastError }));
+    return;
+  }
+  const asset = STATIC[url];
+  if (asset) {
+    serveStatic(asset, res);
     return;
   }
   res.writeHead(404, { 'content-type': 'text/plain' });
