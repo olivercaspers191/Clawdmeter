@@ -7,20 +7,54 @@ panel and the web view, fed by the same `GET /usage` endpoint.
 homeserver:8090/usage ──► widget (every 15 min, + on tap)
 ```
 
-## Build
+## Build + install (on the homeserver)
 
-No Android tooling exists on the homeserver, so this is built from the Windows
-box like the firmware:
+Unlike the firmware, this builds headlessly on the Linux box — Android Studio is
+just a GUI over Gradle. One command builds and serves the APK for the phone:
 
-1. Open the `android/` folder in **Android Studio** (File → Open). Let it sync —
-   it will fetch Gradle and the SDK bits it needs, and may offer to upgrade AGP
-   or Kotlin, which is safe to accept.
-2. Plug in the phone with USB debugging on, pick it in the device dropdown, and
-   hit **Run**. Or `Build → Build APK(s)` and sideload the APK.
+```bash
+cd android && ./build-and-serve.sh          # release (signed); 'debug' also works
+```
 
-From the command line, if you'd rather: `gradlew.bat assembleDebug`, then
-`adb install -r app/build/outputs/apk/debug/app-debug.apk`. (The Gradle wrapper
-JAR isn't committed — Android Studio generates it on first sync.)
+It prints a Tailscale URL; open it on the phone, and Chrome will ask once for
+permission to install unknown apps. No cable, no Windows, nothing published
+publicly. Ctrl-C when the download finishes.
+
+### Toolchain
+
+Installed under `~/android-build/`, entirely in `$HOME` with **no sudo** and
+nothing registered system-wide — `rm -rf ~/android-build` undoes all of it:
+
+| Piece | Path |
+|---|---|
+| Temurin JDK 17 | `~/android-build/jdk` |
+| Android SDK (platform 35, build-tools 35.0.0, platform-tools) | `~/android-build/sdk` |
+| Gradle 8.9 | `~/android-build/gradle-8.9` |
+
+`local.properties` (git-ignored) points the build at the SDK. To rebuild the
+toolchain elsewhere, point `TOOLS=` at it or set `JAVA_HOME`/`ANDROID_HOME`/`GRADLE`.
+
+### Signing
+
+Release builds are signed so updates install over the top of each other; an
+unsigned or differently-signed APK fails with a signature mismatch and has to be
+uninstalled first. **The keystore and its passwords are not in this repo** —
+they're a real signing key, and anyone holding them can publish updates that
+install over yours:
+
+| What | Where |
+|---|---|
+| Keystore | `~/.android/clawdmeter-release.jks` |
+| Passwords / alias | `~/.gradle/gradle.properties` (mode 600), as `CLAWD_*` |
+
+Back both up. Losing them means future builds can't update an installed copy.
+If those properties are absent the release build just stays unsigned, so a fresh
+clone of this repo still builds.
+
+### Android Studio
+
+Still works if you prefer it: File → Open the `android/` folder and let it sync.
+The Gradle wrapper JAR isn't committed; Studio generates it on first sync.
 
 ## Setup
 
