@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Clawdmeter</string>
+    <string name="widget_description">Claude usage limits at a glance</string>
+
+    <string name="config_title">Clawdmeter</string>
+    <string name="config_hint">Address of the usage service on your homeserver. Use the Tailscale name or IP if you want the widget to work away from home.</string>
+    <string name="config_placeholder">http://homeserver:8090</string>
+    <string name="config_save">Save</string>
+    <string name="config_skip">Save without checking</string>
+</resources>

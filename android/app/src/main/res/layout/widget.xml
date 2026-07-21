@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The whole widget is one ImageView; WidgetRenderer draws the bitmap.
+  scaleType="fitXY" is intentional — the bitmap is generated at the widget's own
+  measured size, so there is nothing to letterbox, and any residual rounding
+  difference should fill rather than leave a black seam.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/app_name" />
+</FrameLayout>

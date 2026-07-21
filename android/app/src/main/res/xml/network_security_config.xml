@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The usage service speaks plain HTTP on a private LAN / tailnet, and Android has
+  blocked cleartext by default since API 28, so it has to be re-enabled here.
+
+  This permits cleartext globally rather than per-host. That is deliberate: the
+  server address is entered by the user at setup time and isn't known at build
+  time, and <domain> rules match hostnames by *suffix* with no CIDR support — so
+  there is no way to express "any RFC1918 or 100.64/10 address". A rule like
+  <domain>192.168.</domain> silently matches nothing.
+
+  The exposure is bounded: this app only ever issues one GET to the configured
+  host, sends no credentials, and receives usage percentages. If you move the
+  service behind HTTPS (e.g. Tailscale Funnel with a real certificate), set this
+  to false and the app keeps working.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

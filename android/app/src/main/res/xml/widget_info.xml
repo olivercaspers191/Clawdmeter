@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sizing. minWidth/minHeight are the smallest the launcher will let the widget
+  shrink to; targetCellWidth/Height are the default placement size on Android 12+.
+  resizeMode="horizontal|vertical" is what allows 2x2, 3x3, 4x1, 4x4 and every
+  size in between — WidgetRenderer computes its layout from whatever it gets.
+
+  minResizeWidth/Height are set well below the default so the widget can be
+  squeezed down to roughly 2x1 before the launcher stops it.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="40dp"
+    android:maxResizeWidth="500dp"
+    android:maxResizeHeight="500dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget"
+    android:configure="com.clawdmeter.widget.ConfigActivity"
+    android:previewImage="@drawable/logo"
+    android:description="@string/widget_description"
+    android:updatePeriodMillis="0" />
