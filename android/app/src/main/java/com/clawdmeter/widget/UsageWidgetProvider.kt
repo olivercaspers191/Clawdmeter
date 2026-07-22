@@ -25,11 +25,6 @@ class UsageWidgetProvider : AppWidgetProvider() {
         renderAll(ctx, mgr, intArrayOf(id), UsageRepository.cached(ctx))
     }
 
-    override fun onReceive(ctx: Context, intent: Intent) {
-        super.onReceive(ctx, intent)
-        if (intent.action == ACTION_REFRESH) RefreshWorker.refreshNow(ctx)
-    }
-
     override fun onDisabled(ctx: Context) {
         // Last widget removed — stop the periodic work rather than polling for
         // a widget that no longer exists.
@@ -37,8 +32,6 @@ class UsageWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        const val ACTION_REFRESH = "com.clawdmeter.widget.REFRESH"
-
         fun renderAll(ctx: Context, mgr: AppWidgetManager, ids: IntArray, data: UsageData?) {
             val error = if (UsageRepository.baseUrl(ctx).isEmpty()) {
                 "Tap to set up"
@@ -74,9 +67,12 @@ class UsageWidgetProvider : AppWidgetProvider() {
                     flags,
                 )
             } else {
+                // Explicit component target -> reaches our non-exported
+                // RefreshReceiver; no other app can fire this action.
                 PendingIntent.getBroadcast(
                     ctx, 0,
-                    Intent(ctx, UsageWidgetProvider::class.java).setAction(ACTION_REFRESH),
+                    Intent(ctx, RefreshReceiver::class.java)
+                        .setAction(RefreshReceiver.ACTION_REFRESH),
                     flags,
                 )
             }
