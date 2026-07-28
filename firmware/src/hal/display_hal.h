@@ -30,3 +30,12 @@ void display_hal_tick(void);
 
 // LVGL flush regions must be even-aligned on the CO5300; harmless on others.
 void display_hal_round_area(int32_t* x1, int32_t* y1, int32_t* x2, int32_t* y2);
+
+// Put the panel driver IC into its lowest-power state (sends SLPIN) before deep
+// sleep. Setting brightness to 0 only blanks the AMOLED pixels — the driver's
+// oscillator and boost stay running, and on the 2.16 the panel sits on an
+// always-on 3V3 rail deep sleep can't cut, so this is what actually stops it
+// drawing overnight. No pairing "wake" call is needed: deep sleep resets the
+// chip, so display_hal_init()/begin() bring the panel back on the next boot.
+// No-op on boards that never enter deep sleep.
+void display_hal_sleep(void);

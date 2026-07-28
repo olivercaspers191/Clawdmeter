@@ -10,3 +10,4 @@ uint8_t imu_hal_rotation_quadrant(void) { return 0; }
 void    imu_hal_set_rotation_enabled(bool) {}
 bool    imu_hal_rotation_enabled(void) { return false; }
 bool    imu_hal_consume_shake(void) { return false; }
+void    imu_hal_sleep(void) {}

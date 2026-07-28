@@ -44,6 +44,10 @@ void display_hal_tick(void) {
 
 // Even-alignment rounder — harmless on SH8601, kept for consistency with the
 // other AMOLED ports.
+// No deep sleep on this board (power_hal_deep_sleep_wake_mask()==0), so there is
+// nothing to power down. The real panel-sleep path lives on the 2.16.
+void display_hal_sleep(void) {}
+
 void display_hal_round_area(int32_t* x1, int32_t* y1, int32_t* x2, int32_t* y2) {
     *x1 = *x1 & ~1;
     *y1 = *y1 & ~1;

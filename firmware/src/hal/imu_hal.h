@@ -19,3 +19,10 @@ bool    imu_hal_rotation_enabled(void);
 // once if a shake happened since the last call, then clears. Used to wake the
 // dozing display. Boards without an IMU return false.
 bool    imu_hal_consume_shake(void);
+
+// Power the accelerometer down before deep sleep. The QMI8658 keeps sampling at
+// 128 Hz otherwise, and it shares the always-on rail with the panel, so it
+// draws all night regardless of the sleeping SoC. Deep sleep resets the chip,
+// so imu_hal_init() re-enables it on the next boot — no "wake" call needed.
+// No-op on boards that never enter deep sleep.
+void    imu_hal_sleep(void);

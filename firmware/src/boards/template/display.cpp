@@ -49,6 +49,10 @@ void display_hal_tick(void) {
     // CPU-rotation transition (see the 2.16 reference port).
 }
 
+// No deep sleep on this board (power_hal_deep_sleep_wake_mask()==0), so there is
+// nothing to power down. The real panel-sleep path lives on the 2.16.
+void display_hal_sleep(void) {}
+
 void display_hal_round_area(int32_t* x1, int32_t* y1, int32_t* x2, int32_t* y2) {
     // Most QSPI AMOLED drivers expect even-aligned flush regions. Harmless
     // to apply on panels that don't strictly require it.

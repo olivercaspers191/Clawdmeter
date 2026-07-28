@@ -37,6 +37,13 @@ void display_hal_set_brightness(uint8_t level) {
     if (gfx) gfx->setBrightness(level);
 }
 
+// Real panel sleep for deep sleep. displayOff() sends DISPOFF then SLPIN, which
+// stops the CO5300's oscillator/boost — the part brightness(0) leaves running.
+// The panel is on always-on 3V3, so nothing else cuts it. Re-inits on next boot.
+void display_hal_sleep(void) {
+    if (gfx) gfx->displayOff();
+}
+
 void display_hal_fill_screen(uint16_t color) {
     if (gfx) gfx->fillScreen(color);
 }

@@ -113,6 +113,13 @@ uint8_t imu_hal_rotation_quadrant(void) { return current_rotation; }
 void imu_hal_set_rotation_enabled(bool en) { rotation_enabled = en; }
 bool imu_hal_rotation_enabled(void)        { return rotation_enabled; }
 
+void imu_hal_sleep(void) {
+    // Stop the 128 Hz accelerometer before deep sleep — it shares the panel's
+    // always-on rail, so it draws all night otherwise. Re-enabled by
+    // imu_hal_init() on the next boot (deep sleep resets the chip).
+    if (imu_ok) imu.disableAccelerometer();
+}
+
 bool imu_hal_consume_shake(void) {
     // Clear the latch only — NOT shake_count. This is polled every loop (~5 ms)
     // while imu_hal_tick() samples every IMU_POLL_MS, so zeroing the counter here
