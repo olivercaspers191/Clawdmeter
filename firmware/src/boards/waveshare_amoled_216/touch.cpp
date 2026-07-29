@@ -5,6 +5,7 @@
 #include <TouchDrvCSTXXX.hpp>
 
 static TouchDrvCST92xx touch;
+static bool              touch_ok = false;
 
 static volatile bool     touch_data_ready = false;
 static volatile bool     touch_pressed = false;
@@ -26,7 +27,16 @@ void touch_hal_init(void) {
     touch.setMirrorXY(true, false);
     pinMode(TP_INT, INPUT_PULLUP);
     attachInterrupt(TP_INT, touch_isr, FALLING);
+    touch_ok = true;
     Serial.println("Touch init OK");
+}
+
+// Real touch sleep for deep sleep. sleep() issues the CST9220 sleep command and
+// parks INT/RST open-drain; our RTC pullup on the INT pin then holds it high, so
+// it neither scans nor spuriously wakes us. Trade-off: no tap-to-wake until the
+// next boot re-inits the controller (button wake still works).
+void touch_hal_sleep(void) {
+    if (touch_ok) touch.sleep();
 }
 
 void touch_hal_read(uint16_t* x, uint16_t* y, bool* pressed) {

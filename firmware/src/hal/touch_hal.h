@@ -15,3 +15,11 @@ void touch_hal_init(void);
 // whether any finger is currently down; coordinates are valid only when
 // pressed is true and are in display (post-orientation) coordinates.
 void touch_hal_read(uint16_t* x, uint16_t* y, bool* pressed);
+
+// Put the touch controller to sleep before deep sleep. The CST9220 keeps
+// scanning for fingers otherwise, on the panel's always-on rail, so it draws
+// all night. COSTS tap-to-wake: a sleeping controller won't assert its INT on
+// touch, so deep sleep must then be woken by a physical button (GPIO0/18), not
+// the screen. Re-inited by touch_hal_init() on the next boot (deep sleep resets
+// the chip). No-op on boards that never enter deep sleep.
+void touch_hal_sleep(void);

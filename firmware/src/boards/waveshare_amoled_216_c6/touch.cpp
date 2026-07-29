@@ -54,3 +54,6 @@ void touch_hal_read(uint16_t* x, uint16_t* y, bool* pressed) {
     *y = touch_y;
     *pressed = touch_pressed;
 }
+
+// No deep sleep on this board, so nothing to power down. Real impl on the 2.16.
+void touch_hal_sleep(void) {}

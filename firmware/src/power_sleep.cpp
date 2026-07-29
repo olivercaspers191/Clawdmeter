@@ -3,6 +3,7 @@
 #include "hal/power_hal.h"
 #include "hal/display_hal.h"
 #include "hal/imu_hal.h"
+#include "hal/touch_hal.h"
 #include <Arduino.h>
 #include <esp_sleep.h>
 #include "driver/rtc_io.h"
@@ -51,19 +52,20 @@ void power_sleep_enter_deep(void) {
     uint64_t mask = power_hal_deep_sleep_wake_mask();
     if (mask == 0) return;   // board has no deep-sleep wake source — stay awake
 
-    Serial.println("power: entering deep sleep (wake on tap/button)");
+    Serial.println("power: entering deep sleep (wake on button)");
     Serial.flush();
 
     // Power down the peripherals on the always-on 3V3 rail before sleeping. Deep
     // sleep stops the SoC but not the panel driver, IMU, or touch controller —
-    // measured at ~3%/hour asleep, they were the real overnight drain. Skip this
-    // on a power-log timer wake: that fast path never brought the display or IMU
-    // up (see setup()), so there is nothing initialised to sleep, and touching
-    // an unconstructed driver would fault. Both re-init on the next boot's
-    // setup() because deep sleep resets the chip.
+    // measured at ~2.3-3%/hour asleep, they were the real overnight drain. Skip
+    // this on a power-log timer wake: that fast path never brought them up (see
+    // setup()), so there is nothing initialised to sleep, and touching an
+    // unconstructed driver would fault. All re-init on the next boot's setup()
+    // because deep sleep resets the chip.
     if (!woke_from_timer) {
         display_hal_sleep();   // CO5300 SLPIN — stops oscillator/boost
         imu_hal_sleep();       // QMI8658 accelerometer off
+        touch_hal_sleep();     // CST9220 sleep — costs tap-to-wake (button still wakes)
     }
 
 #ifdef USE_WIFI_TRANSPORT
