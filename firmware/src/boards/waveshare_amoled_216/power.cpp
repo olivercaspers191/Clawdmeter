@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <XPowersLib.h>
+#include <esp_sleep.h>
+#include <driver/gpio.h>
 
 // PWR button comes from AXP2101 PKEY IRQs:
 //   SHORT    — quick tap (cycle splash animations)
@@ -97,4 +99,28 @@ uint64_t power_hal_deep_sleep_wake_mask(void) {
     // RTC-capable, active-low, idle-high via pullup. A press or a screen tap
     // pulls one low and wakes the device (ext1 ANY_LOW).
     return (1ULL << BTN_BACK_GPIO) | (1ULL << BTN_FWD_GPIO) | (1ULL << TP_INT);
+}
+
+bool power_hal_light_sleep(uint32_t max_ms) {
+    // Same three pins as deep sleep, but as light-sleep GPIO wake sources
+    // (level-triggered low — they idle high via pullup, so a press/tap holding
+    // one low wakes us). A timer bounds the nap for housekeeping.
+    const gpio_num_t pins[] = {
+        (gpio_num_t)BTN_BACK_GPIO, (gpio_num_t)BTN_FWD_GPIO, (gpio_num_t)TP_INT,
+    };
+    for (gpio_num_t p : pins) gpio_wakeup_enable(p, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+    esp_sleep_enable_timer_wakeup((uint64_t)max_ms * 1000ULL);
+
+    esp_light_sleep_start();   // CPU halts here; resumes on the next line at wake
+
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+
+    // gpio_wakeup_enable() left each pin's interrupt type as LOW_LEVEL. The touch
+    // driver's ISR expects a falling edge, so restore it; the buttons are polled
+    // (no ISR), so disabling their wake is enough.
+    for (gpio_num_t p : pins) gpio_wakeup_disable(p);
+    gpio_set_intr_type((gpio_num_t)TP_INT, GPIO_INTR_NEGEDGE);
+
+    return cause == ESP_SLEEP_WAKEUP_GPIO;
 }

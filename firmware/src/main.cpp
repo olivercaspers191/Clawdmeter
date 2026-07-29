@@ -353,10 +353,11 @@ void loop() {
     // firing an instant wake the moment the screen dozes.
     if (imu_hal_consume_shake() && idle_is_asleep()) idle_consume_wake_press();
 
-    // On entering the doze window (screen off, 15–60 min): kill WiFi and drop the
-    // CPU to 80 MHz — the display isn't visible so the only job is watching the
-    // IMU for a shake. On wake: full clock first (WiFi needs it), radio back on,
-    // immediate poll so the bars refresh right away.
+    // On entering the dark idle window (screen off, 20–60 min): kill WiFi and
+    // drop the clock. The heavy lifting is the light-sleep nap below; the 80 MHz
+    // downclock only covers the brief housekeeping ticks between naps. On wake:
+    // full clock first (WiFi needs it), radio back on, immediate poll so the bars
+    // refresh right away.
     static bool was_dozing = false;
     bool dozing = idle_is_asleep();
     if (dozing != was_dozing) {
@@ -372,6 +373,18 @@ void loop() {
     }
 
     power_log_tick(dozing ? PLOG_DOZE : PLOG_ACTIVE);
+
+    // Dark and settled on battery → halt the CPU in light sleep instead of
+    // spinning at 80 MHz (that spin, just to poll the IMU, was the ~15 mA that
+    // made the old doze expensive). A tap or button wakes it instantly; the
+    // GPIO-wake return hands off to the idle fade-in. A timer-tick return just
+    // falls through so the loop top can re-check the deep-sleep threshold and the
+    // power log keeps ticking. Gate on a real wake source (the 2.16); elsewhere
+    // power_hal_light_sleep() no-ops and the middle gear stays a plain screen-off.
+    if (idle_is_asleep_settled() && !power_hal_is_vbus_in()
+            && power_hal_deep_sleep_wake_mask() != 0) {
+        if (power_hal_light_sleep(LIGHT_SLEEP_TICK_MS)) idle_consume_wake_press();
+    }
 
     sound_hal_tick();
     splash_tick();

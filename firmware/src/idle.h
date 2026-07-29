@@ -18,8 +18,13 @@ bool idle_consume_wake_press(void);
 
 // Touch should NOT count as activity (avoids accidental wakes from pets,
 // sleeves, etc.). Callers use this to silently drop touch events while the
-// panel is dark.
+// panel is dark. True through the fade-out too, not just once fully dark.
 bool idle_is_asleep(void);
+
+// True only once the screen has fully faded to black and settled (not mid-fade).
+// The light-sleep gear gates on this so the fade-out/fade-in animations render
+// smoothly instead of freezing when the CPU halts.
+bool idle_is_asleep_settled(void);
 
 // True once the screen has been dark long enough (IDLE_DEEPSLEEP_TIMEOUT_MS) to
 // warrant real deep sleep. The caller stashes state and calls

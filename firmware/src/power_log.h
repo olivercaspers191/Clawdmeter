@@ -20,7 +20,7 @@
 
 enum plog_phase_t : uint8_t {
     PLOG_ACTIVE = 0,   // screen on, WiFi up, 240 MHz
-    PLOG_DOZE   = 1,   // screen dark, WiFi off, 80 MHz, CPU awake for shake
+    PLOG_DOZE   = 1,   // screen dark, WiFi off, CPU halted in light sleep (2.16)
     PLOG_DEEP   = 2,   // sampled by the deep-sleep timer wake
     PLOG_BOOT   = 3,   // first sample after a cold boot
     PLOG_WAKE   = 4,   // woke from deep sleep (button/tap)

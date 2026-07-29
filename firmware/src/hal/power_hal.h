@@ -31,3 +31,12 @@ bool power_hal_pwr_released(void);
 // the board has no deep-sleep wake source; deep sleep is then skipped for it.
 #include <stdint.h>
 uint64_t power_hal_deep_sleep_wake_mask(void);
+
+// Halt the CPU in light sleep until a wake GPIO (tap/button, active-low) fires
+// or max_ms elapses. RAM is retained, so execution resumes right here on wake —
+// no reboot. Returns true when a GPIO (user interaction) caused the wake, false
+// on the timer bound (a housekeeping tick) or when unsupported. Boards with no
+// wake source return false immediately without sleeping, so the caller falls
+// back to its ordinary screen-off idle. Only meaningful on battery — never call
+// it while USB is present (light sleep + USB-CDC don't mix cleanly).
+bool power_hal_light_sleep(uint32_t max_ms);
