@@ -348,10 +348,18 @@ void loop() {
     transport_tick();
     power_hal_tick();
     imu_hal_tick();
-    // Shake while the screen is dozing (15–60 min, SoC still awake) wakes it.
-    // Consume unconditionally so a latch set while awake is discarded rather than
-    // firing an instant wake the moment the screen dozes.
-    if (imu_hal_consume_shake() && idle_is_asleep()) idle_consume_wake_press();
+    // Shake handling — consume the latch unconditionally so it can't fire stale:
+    //   • dozing screen   → wake it (20–60 min doze, SoC still awake)
+    //   • awake on splash  → skip to the next animation (shake-to-cycle creatures)
+    //   • awake elsewhere  → ignored
+    if (imu_hal_consume_shake()) {
+        if (idle_is_asleep()) {
+            idle_consume_wake_press();
+        } else if (ui_get_current_screen() == SCREEN_SPLASH) {
+            splash_next();
+            idle_note_activity();   // deliberate input — keep the screen awake
+        }
+    }
 
     // On entering the dark idle window (screen off, 20–60 min): kill WiFi and
     // drop the clock. The heavy lifting is the light-sleep nap below; the 80 MHz
