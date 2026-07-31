@@ -184,6 +184,7 @@ static void check_serial_cmd() {
             else if (strcmp(cmd_buf, "buzz") == 0)  sound_hal_play_reset();
             else if (strcmp(cmd_buf, "powerlog") == 0)      power_log_dump();
             else if (strcmp(cmd_buf, "powerlogclear") == 0) power_log_clear();
+            else if (strcmp(cmd_buf, "poweroff") == 0)      power_hal_shutdown();
             cmd_pos = 0;
         } else if (cmd_pos < CMD_BUF_SIZE - 1) {
             cmd_buf[cmd_pos++] = c;

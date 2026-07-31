@@ -98,3 +98,6 @@ uint64_t power_hal_deep_sleep_wake_mask(void) { return 0; }
 
 // No light-sleep wake source wired on this board — caller keeps plain screen-off.
 bool power_hal_light_sleep(uint32_t) { return false; }
+
+// Deep sleep not wired on this board; the `poweroff` command is a no-op here.
+void power_hal_shutdown(void) {}

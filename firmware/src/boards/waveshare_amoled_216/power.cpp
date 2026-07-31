@@ -101,6 +101,17 @@ uint64_t power_hal_deep_sleep_wake_mask(void) {
     return (1ULL << BTN_BACK_GPIO) | (1ULL << BTN_FWD_GPIO) | (1ULL << TP_INT);
 }
 
+void power_hal_shutdown(void) {
+    // AXP2101 soft power-off: sets the COMMON_CONFIG power-off bit, cutting all
+    // rails except VRTC. The panel/touch/IMU sit on rails the AXP powers by
+    // default, so this is the only software way to truly power-cycle them (deep
+    // sleep and a chip reboot both leave those rails up). On battery the device
+    // stays off until a PWR press; on USB the AXP re-powers, so it cold-reboots.
+    Serial.println("power: AXP2101 shutdown (cutting all rails — press PWR / replug to boot)");
+    Serial.flush();
+    pmu.shutdown();
+}
+
 bool power_hal_light_sleep(uint32_t max_ms) {
     // Same three pins as deep sleep, but as light-sleep GPIO wake sources
     // (level-triggered low — they idle high via pullup, so a press/tap holding

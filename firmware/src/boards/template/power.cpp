@@ -29,3 +29,7 @@ uint64_t power_hal_deep_sleep_wake_mask(void) { return 0; }
 
 // No light-sleep wake source wired on this board — caller keeps plain screen-off.
 bool power_hal_light_sleep(uint32_t) { return false; }
+
+// No self-shutdown on this stub board. Mirror the 216 (pmu.shutdown()) if your
+// PMU can cut its own rails.
+void power_hal_shutdown(void) {}

@@ -40,3 +40,11 @@ uint64_t power_hal_deep_sleep_wake_mask(void);
 // back to its ordinary screen-off idle. Only meaningful on battery — never call
 // it while USB is present (light sleep + USB-CDC don't mix cleanly).
 bool power_hal_light_sleep(uint32_t max_ms);
+
+// Hard power-off: tell the PMU to cut every rail except VRTC. Everything —
+// SoC, panel, touch, IMU — loses power, so a subsequent power-on (PWR key, or
+// VBUS still present) is a true cold boot. Used by the `poweroff` serial command
+// to force a full power-cycle of peripherals on the always-on rail (e.g. to
+// recover a touch controller stuck in a bad state) when the hardware PWR-hold
+// isn't cutting it. No-op on boards without a PMU that can self-shutdown.
+void power_hal_shutdown(void);
