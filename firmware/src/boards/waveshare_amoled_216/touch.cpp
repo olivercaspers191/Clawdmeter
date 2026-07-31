@@ -31,10 +31,15 @@ void touch_hal_init(void) {
     Serial.println("Touch init OK");
 }
 
-// Real touch sleep for deep sleep. sleep() issues the CST9220 sleep command and
-// parks INT/RST open-drain; our RTC pullup on the INT pin then holds it high, so
-// it neither scans nor spuriously wakes us. Trade-off: no tap-to-wake until the
-// next boot re-inits the controller (button wake still works).
+// Put the CST9220 to sleep: sleep() issues the sleep command and parks INT/RST
+// open-drain; our RTC pullup on the INT pin then holds it high, so it neither
+// scans nor spuriously wakes us.
+//
+// WARNING — currently UNUSED on purpose. power_sleep.cpp no longer calls this.
+// Sleeping the controller before deep sleep left it in a state the next boot's
+// touch.begin() didn't cleanly recover from (touch came back dead after a
+// deep-sleep→USB wake), and it also killed TP_INT tap-to-wake. Kept only as a
+// HAL capability; don't re-wire it into the sleep path without fixing recovery.
 void touch_hal_sleep(void) {
     if (touch_ok) touch.sleep();
 }

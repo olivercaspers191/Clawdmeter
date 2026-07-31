@@ -3,7 +3,6 @@
 #include "hal/power_hal.h"
 #include "hal/display_hal.h"
 #include "hal/imu_hal.h"
-#include "hal/touch_hal.h"
 #include <Arduino.h>
 #include <esp_sleep.h>
 #include "driver/rtc_io.h"
@@ -56,16 +55,22 @@ void power_sleep_enter_deep(void) {
     Serial.flush();
 
     // Power down the peripherals on the always-on 3V3 rail before sleeping. Deep
-    // sleep stops the SoC but not the panel driver, IMU, or touch controller —
-    // measured at ~2.3-3%/hour asleep, they were the real overnight drain. Skip
+    // sleep stops the SoC but not the panel driver or IMU — measured at
+    // ~2.3-3%/hour asleep, the panel driver was the real overnight drain. Skip
     // this on a power-log timer wake: that fast path never brought them up (see
     // setup()), so there is nothing initialised to sleep, and touching an
-    // unconstructed driver would fault. All re-init on the next boot's setup()
+    // unconstructed driver would fault. Both re-init on the next boot's setup()
     // because deep sleep resets the chip.
+    //
+    // The touch controller (CST9220) is deliberately LEFT SCANNING — do NOT call
+    // touch_hal_sleep() here. sleep()'ing it saved almost nothing (the panel was
+    // the drain) but left it in a state the next boot's touch.begin() didn't
+    // cleanly recover from, so touch came back dead after a deep-sleep→USB wake.
+    // Leaving it awake also keeps TP_INT live as the ext1 tap-to-wake source
+    // (see power_hal_deep_sleep_wake_mask), which sleep()'ing would have killed.
     if (!woke_from_timer) {
-        display_hal_sleep();   // CO5300 SLPIN — stops oscillator/boost
+        display_hal_sleep();   // CO5300 SLPIN — stops oscillator/boost (the real win)
         imu_hal_sleep();       // QMI8658 accelerometer off
-        touch_hal_sleep();     // CST9220 sleep — costs tap-to-wake (button still wakes)
     }
 
 #ifdef USE_WIFI_TRANSPORT
